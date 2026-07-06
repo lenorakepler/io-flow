@@ -1,0 +1,202 @@
+/* viewer.css — USER-EDITABLE SURFACE (2 of 2).
+ *
+ * ALL node appearance lives here. Change a color, spacing, badge, or add a
+ * `.node--<newtype>` rule without touching any engine file. The engine only
+ * relies on: `.node` being `position: absolute`, and `.node__children` being
+ * the child-mount point inside compound nodes.
+ */
+
+:root {
+  --bg: #f6f7f9;
+  --ink: #1f2933;
+  --muted: #6b7280;
+  --line: #9aa5b1;
+  --edge: #7b8794;
+
+  --file: #2f6feb;
+  --option: #7c3aed;
+  --param: #0e9f6e;
+  --function: #d97706;
+  --method: #db2777;
+  --class: #334155;
+  --attr: #0891b2;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  height: 100%;
+  font: 14px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  color: var(--ink);
+  background: var(--bg);
+}
+
+#app { position: fixed; inset: 0; overflow: hidden; }
+
+#viewport {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  cursor: grab;
+}
+#viewport:active { cursor: grabbing; }
+
+#canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  transform-origin: 0 0;
+}
+
+#edges {
+  position: absolute;
+  top: 0;
+  left: 0;
+  overflow: visible;
+  pointer-events: none;
+}
+#edges .edge {
+  fill: none;
+  stroke: var(--edge);
+  stroke-width: 1.6;
+  transition: opacity 0.18s ease;
+}
+#edges #arrow path { fill: var(--edge); }
+
+/* ---- Nodes ---------------------------------------------------------------- */
+.node {
+  position: absolute;
+  max-width: 260px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.06);
+  cursor: pointer;
+  user-select: none;
+  transition: opacity 0.18s ease, box-shadow 0.12s ease;
+}
+.node:hover { box-shadow: 0 2px 8px rgba(16, 24, 40, 0.14); }
+
+.node__title { font-weight: 600; white-space: nowrap; }
+.node__meta { color: var(--muted); font-size: 12px; margin-top: 2px; white-space: nowrap; }
+.node__meta code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+.node__badge {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  padding: 1px 6px;
+  border-radius: 999px;
+  color: #fff;
+  vertical-align: middle;
+}
+
+/* Per-type accents: left border + badge color. */
+.node--file { border-left: 4px solid var(--file); }
+.node--file .node__badge { background: var(--file); }
+.node--option { border-left: 4px solid var(--option); }
+.node--option .node__badge { background: var(--option); }
+.node--parameter { border-left: 4px solid var(--param); }
+.node--parameter .node__badge { background: var(--param); }
+.node--function { border-left: 4px solid var(--function); }
+.node--method { border-left: 4px solid var(--method); }
+.node--attributes { border-left: 4px solid var(--attr); background: #f0fbff; }
+
+/* Compound class node wraps its children. The children mount shares the class
+ * node's origin (inset:0) so ELK's parent-relative child coordinates map 1:1;
+ * the header is an absolute overlay sitting in ELK's reserved top padding. */
+.node--class {
+  background: rgba(51, 65, 85, 0.05);
+  border: 1px dashed var(--class);
+  max-width: none;
+  padding: 0;
+  cursor: pointer;
+}
+.node--class .node__header {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 10px;
+  border-bottom: 1px dashed var(--class);
+  background: rgba(51, 65, 85, 0.08);
+  border-radius: 8px 8px 0 0;
+  z-index: 1;
+}
+.node--class .node__children {
+  position: absolute;
+  inset: 0;   /* origin == class node origin, matching ELK child coords */
+}
+
+/* ---- Dim (M3) ------------------------------------------------------------- */
+.dimmed { opacity: 0.12; }
+.node.dimmed { pointer-events: none; }
+
+/* ---- Sidebar (M3) --------------------------------------------------------- */
+#sidebar {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 300px;
+  height: 100%;
+  padding: 18px 20px;
+  background: #fff;
+  border-left: 1px solid var(--line);
+  box-shadow: -2px 0 12px rgba(16, 24, 40, 0.08);
+  overflow-y: auto;
+  z-index: 20;
+}
+#sidebar[hidden] { display: none; }
+#sidebar h2 { margin: 0 0 4px; font-size: 16px; word-break: break-all; }
+#sidebar .sb-type { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; }
+#sidebar dl { margin: 16px 0 0; display: grid; grid-template-columns: auto 1fr; gap: 6px 12px; }
+#sidebar dt { color: var(--muted); font-size: 12px; }
+#sidebar dd { margin: 0; word-break: break-word; }
+#sidebar .sb-close {
+  position: absolute; top: 12px; right: 12px;
+  border: none; background: none; font-size: 20px; line-height: 1; cursor: pointer; color: var(--muted);
+}
+
+/* ---- Notice + save button ------------------------------------------------- */
+#notice {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 30;
+  padding: 8px 14px;
+  background: #fffbeb;
+  border: 1px solid #f59e0b;
+  border-radius: 8px;
+  font-size: 13px;
+  color: #92400e;
+  box-shadow: 0 2px 8px rgba(16, 24, 40, 0.12);
+}
+#notice[hidden] { display: none; }
+
+#save-btn {
+  position: absolute;
+  bottom: 18px;
+  right: 18px;
+  z-index: 30;
+  padding: 10px 18px;
+  border: none;
+  border-radius: 8px;
+  background: var(--file);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 2px 10px rgba(16, 24, 40, 0.2);
+}
+#save-btn[hidden] { display: none; }
+#save-btn:disabled { opacity: 0.6; cursor: default; }
+
+body:not(.ready) #canvas { visibility: hidden; }

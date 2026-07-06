@@ -1,0 +1,95 @@
+/* engine/layout.js — ELK layout. INFRASTRUCTURE: rarely touched.
+ *
+ * Converts the graph model (flat nodes + parent pointers) into ELK's nested
+ * form, measures leaf nodes from the live DOM, runs `layered` with
+ * INCLUDE_CHILDREN so edges may cross the class/child hierarchy, and returns a
+ * flat map { id: {x, y, w, h} } of *parent-relative* coordinates.
+ */
+window.IOFlow = window.IOFlow || {};
+(function (IOF) {
+  "use strict";
+
+  const ROOT_OPTIONS = {
+    "elk.algorithm": "layered",
+    "elk.direction": "RIGHT",
+    "elk.hierarchyHandling": "INCLUDE_CHILDREN",
+    "elk.layered.spacing.nodeNodeBetweenLayers": "70",
+    "elk.spacing.nodeNode": "40",
+    "elk.spacing.edgeNode": "24",
+    "elk.padding": "[top=20,left=20,bottom=20,right=20]",
+  };
+
+  // Room for the class header + inner padding around nested children.
+  const COMPOUND_OPTIONS = {
+    "elk.padding": "[top=40,left=16,bottom=16,right=16]",
+  };
+
+  function buildForest(graph) {
+    const byId = {};
+    graph.nodes.forEach((n) => {
+      byId[n.id] = { node: n, children: [] };
+    });
+    const roots = [];
+    graph.nodes.forEach((n) => {
+      const entry = byId[n.id];
+      if (n.parent != null && byId[n.parent]) byId[n.parent].children.push(entry);
+      else roots.push(entry);
+    });
+    return roots;
+  }
+
+  function toElk(entry, domIndex, hints) {
+    const { node, children } = entry;
+    const out = { id: node.id };
+    if (children.length) {
+      out.layoutOptions = COMPOUND_OPTIONS;
+      out.children = children.map((c) => toElk(c, domIndex, hints));
+    } else {
+      const el = domIndex[node.id];
+      const r = el.getBoundingClientRect();
+      // Round up to avoid sub-pixel clipping of measured content.
+      out.width = Math.ceil(r.width);
+      out.height = Math.ceil(r.height);
+    }
+    // Feed a saved position as a placement hint (used with interactive mode on
+    // a topology change; ignored gracefully otherwise).
+    const h = hints && hints[node.id];
+    if (h) {
+      out.x = h[0];
+      out.y = h[1];
+    }
+    return out;
+  }
+
+  async function run(graph, domIndex, hints) {
+    const roots = buildForest(graph);
+    const rootOptions = Object.assign({}, ROOT_OPTIONS);
+    if (hints && Object.keys(hints).length) {
+      rootOptions["elk.interactive"] = "true";
+    }
+    const elkGraph = {
+      id: "root",
+      layoutOptions: rootOptions,
+      children: roots.map((r) => toElk(r, domIndex, hints)),
+      edges: graph.edges.map((e, i) => ({
+        id: "edge_" + i,
+        sources: [e.source],
+        targets: [e.target],
+      })),
+    };
+
+    const elk = new ELK();
+    const laid = await elk.layout(elkGraph);
+
+    const pos = {};
+    (function walk(nodes) {
+      (nodes || []).forEach((n) => {
+        pos[n.id] = { x: n.x || 0, y: n.y || 0, w: n.width || 0, h: n.height || 0 };
+        walk(n.children);
+      });
+    })(laid.children);
+    return pos;
+  }
+
+  IOF.layout = { run };
+})(window.IOFlow);
