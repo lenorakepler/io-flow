@@ -32,6 +32,7 @@ SCRIPT_MANIFEST = [
     "engine/live.js",
     "engine/collapse.js",
     "engine/ui.js",
+    "engine/a11y.js",
     "engine/viewer.js",
 ]
 

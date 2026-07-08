@@ -29,6 +29,19 @@
 
 * { box-sizing: border-box; }
 
+/* Visually hidden but exposed to assistive tech (a11y.js text layers). */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 html, body {
   margin: 0;
   height: 100%;
@@ -96,6 +109,12 @@ html, body {
   transition: opacity 0.18s ease, box-shadow 0.12s ease;
 }
 .node:hover { box-shadow: 0 2px 8px rgba(16, 24, 40, 0.14); }
+.node:focus-visible,
+.node__collapse:focus-visible,
+#sidebar .sb-close:focus-visible {
+  outline: 2px solid var(--file);
+  outline-offset: 2px;
+}
 
 .node__title { font-weight: 600; white-space: nowrap; }
 .node__meta { color: var(--muted); font-size: 12px; margin-top: 2px; white-space: nowrap; }

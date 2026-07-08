@@ -91,13 +91,16 @@ window.IOFlow = window.IOFlow || {};
     });
 
     showSidebar(state, id);
+    if (IOF.a11y) IOF.a11y.onSelect(state, id);
   }
 
   function clear(state) {
+    const hadSelection = state.selected != null;
     state.selected = null;
     state.graph.nodes.forEach((n) => state.nodeEls[n.id].classList.remove("dimmed"));
     state.edgeEls.forEach(({ el }) => el.classList.remove("dimmed"));
     hideSidebar();
+    if (hadSelection && IOF.a11y) IOF.a11y.onClear();
   }
 
   // ---- Sidebar ---------------------------------------------------------------

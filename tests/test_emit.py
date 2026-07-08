@@ -29,7 +29,7 @@ def test_build_html_inlines_graph_and_all_scripts():
     # Title is escaped.
     assert "<title>My &lt;Diagram&gt;</title>" in html
     # Every manifest script made it in (spot-check the bookends + new modules).
-    for needle in ("panzoom", "IOF.templates", "IOF.collapse", "IOF.ui"):
+    for needle in ("panzoom", "IOF.templates", "IOF.collapse", "IOF.ui", "IOF.a11y"):
         assert needle in html
     # No CDN/network references (inline URLs inside vendored code are fine).
     assert "<script src=" not in html

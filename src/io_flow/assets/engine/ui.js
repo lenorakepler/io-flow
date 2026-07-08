@@ -93,10 +93,12 @@ window.IOFlow = window.IOFlow || {};
         types.push(n.type);
       }
     });
+    legend.setAttribute("role", "list");
+    legend.setAttribute("aria-label", "Node types");
     legend.innerHTML = types
       .map(
         (t) =>
-          `<div class="node node--${IOF.esc(t)}"><span class="node__title">${IOF.esc(t)}</span></div>`
+          `<div class="node node--${IOF.esc(t)}" role="listitem"><span class="node__title">${IOF.esc(t)}</span></div>`
       )
       .join("");
   }

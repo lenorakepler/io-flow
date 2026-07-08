@@ -23,12 +23,13 @@
       </div>
     </div>
     <div id="hud">
-      <input id="search" type="search" placeholder="Filter nodes…" autocomplete="off">
+      <input id="search" type="search" placeholder="Filter nodes…" autocomplete="off"
+             aria-label="Filter nodes">
       <div id="legend"></div>
     </div>
-    <aside id="sidebar" hidden></aside>
-    <div id="notice" hidden></div>
-    <button id="save-btn" hidden>Save layout</button>
+    <aside id="sidebar" aria-label="Node details" hidden></aside>
+    <div id="notice" role="status" hidden></div>
+    <button id="save-btn" aria-live="polite" hidden>Save layout</button>
   </div>
 
   <script id="graph-data" type="application/json">/*__GRAPH__*/</script>

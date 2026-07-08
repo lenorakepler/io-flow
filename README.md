@@ -150,6 +150,25 @@ collapse, ui) and rarely needs editing.
   refreshes itself; a parse error shows in the browser and recovers on fix.
   Unsaved drag positions are lost on reload — the file is the source of truth.
 
+## Accessibility
+
+The picture itself can't carry a graph for a screen reader, so the viewer
+generates a parallel text representation from the same graph model:
+
+- A hidden **text alternative** (first in reading order): every node as a
+  nested list mirroring containment, each entry naming its inputs and outputs
+  with edge types and labels — the information the SVG edges encode visually.
+- **Nodes are focusable** with accessible names ("do_run, function") and
+  descriptions listing their connections. Enter/Space selects (dim + sidebar),
+  Escape clears, and selections are announced via a live region.
+- **Arrow keys nudge** the focused node by 8px (Shift for 1px), with the same
+  parent clamping as mouse drag — layout editing works without a pointer.
+- Collapse toggles carry `aria-expanded` and name their target; the search
+  field, legend, notice, and save-state changes are labeled/announced.
+
+Known gaps: pan/zoom and the resize handle are pointer-only (search-and-Enter
+centers a node as the keyboard alternative to panning).
+
 ## Architecture
 
 ```

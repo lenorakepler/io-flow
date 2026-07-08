@@ -17,10 +17,13 @@ window.IOFlow = window.IOFlow || {};
       if (!mount || !mount.childElementCount) return; // leaves + empty compounds
       const header = state.nodeEls[n.id].querySelector(".node__header");
       if (!header) return;
+      const name = n.label != null ? n.label : n.id;
       const btn = document.createElement("button");
       btn.type = "button";
       btn.className = "node__collapse";
-      btn.setAttribute("aria-label", "Collapse");
+      btn.setAttribute("aria-label", `Collapse ${name}`);
+      btn.setAttribute("aria-expanded", "true");
+      btn.dataset.nodeName = name;
       btn.textContent = "▾";
       // Own the gesture: no drag start, no select-click.
       btn.addEventListener("pointerdown", (e) => e.stopPropagation());
@@ -39,7 +42,8 @@ window.IOFlow = window.IOFlow || {};
     else state.collapsed.delete(id);
     el.classList.toggle("node--collapsed", on);
     btn.textContent = on ? "▸" : "▾";
-    btn.setAttribute("aria-label", on ? "Expand" : "Collapse");
+    btn.setAttribute("aria-label", `${on ? "Expand" : "Collapse"} ${btn.dataset.nodeName}`);
+    btn.setAttribute("aria-expanded", String(!on));
     // Displayed height only; state.pos keeps the expanded size for restore.
     el.style.height = (on ? IOF.headerH() : state.pos[id].h) + "px";
     IOF.edges.renderAll(state);
