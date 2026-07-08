@@ -42,6 +42,13 @@ window.IOFlow = window.IOFlow || {};
       const parentMount = n.parent != null && state.childMount[n.parent];
       (parentMount || canvas).appendChild(state.nodeEls[n.id]);
     });
+    // A compound with no members has nothing in normal flow (its header is an
+    // absolute overlay), so it would measure 0x0. Mark it so the header can
+    // join the flow and the node sizes to its text like a leaf (viewer.css).
+    graph.nodes.forEach((n) => {
+      const mount = state.childMount[n.id];
+      if (mount && !mount.childElementCount) state.nodeEls[n.id].classList.add("node--empty");
+    });
 
     // 2. Fonts must settle before measuring text-sized leaves.
     if (document.fonts && document.fonts.ready) {
@@ -130,8 +137,10 @@ window.IOFlow = window.IOFlow || {};
           h = Math.max(maxY + 16, p[3] || 0);
         } else {
           const r = state.nodeEls[n.id].getBoundingClientRect();
-          w = Math.ceil(r.width);
-          h = Math.ceil(r.height);
+          // An empty compound may carry a manual size ([x, y, w, h]); never
+          // shrink below the measured text.
+          w = Math.max(Math.ceil(r.width), p[2] || 0);
+          h = Math.max(Math.ceil(r.height), p[3] || 0);
         }
         laid[n.id] = { x: p[0], y: p[1], w, h };
       });

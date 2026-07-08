@@ -201,6 +201,15 @@ html, body {
   inset: 0;
 }
 
+/* An empty compound (class/group with no members yet) sizes to its header
+ * text like a leaf: the header sits in normal flow instead of overlaying the
+ * (nonexistent) children. The engine adds .node--empty (viewer.js). */
+.node--empty .node__header {
+  position: static;
+  border-bottom: none;
+  border-radius: 8px;
+}
+
 /* ---- Resize handle (compounds only) ----------------------------------------- */
 .node__resize {
   position: absolute;
