@@ -7,9 +7,12 @@ output references no CDNs and makes zero network requests.
 
 from __future__ import annotations
 
+import html
 import json
 from pathlib import Path
 from typing import Any
+
+DEFAULT_TITLE = "io-flow diagram"
 
 ASSETS = Path(__file__).resolve().parent / "assets"
 
@@ -24,9 +27,17 @@ SCRIPT_MANIFEST = [
     "engine/dim.js",
     "engine/pan.js",
     "engine/drag.js",
+    "engine/resize.js",
     "engine/save.js",
+    "engine/live.js",
+    "engine/collapse.js",
+    "engine/ui.js",
     "engine/viewer.js",
 ]
+
+# elkjs is ~1.6 MB. When every node position is pinned (layout mode
+# "restore") the browser never runs ELK, so it can be omitted entirely.
+ELK_ASSET = "vendor/elk.bundled.js"
 
 
 def _read(rel: str) -> str:
@@ -45,25 +56,51 @@ def _inline_json(graph: dict[str, Any]) -> str:
     return text.replace("<", "\\u003c")
 
 
-def build_html(graph: dict[str, Any]) -> str:
+def elk_omitted(graph: dict[str, Any]) -> bool:
+    """True when the artifact can ship without elkjs (all positions pinned)."""
+    return (graph.get("_layout") or {}).get("mode") == "restore"
+
+
+def build_html(
+    graph: dict[str, Any],
+    css: str | Path | None = None,
+    templates: str | Path | None = None,
+) -> str:
+    """Assemble the single-file HTML.
+
+    ``css`` / ``templates`` optionally point at project-local files replacing
+    the packaged ``viewer.css`` / ``templates.js`` -- a per-project skin
+    without editing the installed package.
+    """
     shell = _read("viewer.html")
-    styles = _read("viewer.css")
+    styles = Path(css).read_text(encoding="utf-8") if css else _read("viewer.css")
 
     scripts = []
     for rel in SCRIPT_MANIFEST:
-        path = ASSETS / rel
+        if rel == ELK_ASSET and elk_omitted(graph):
+            continue
+        path = Path(templates) if (rel == "templates.js" and templates) else ASSETS / rel
         if not path.exists():
-            continue  # engine modules are added milestone-by-milestone
+            raise FileNotFoundError(
+                f"engine asset missing: {path} (broken install or manifest drift)"
+            )
         scripts.append(f"<script>\n{_safe_script_body(path.read_text(encoding='utf-8'))}\n</script>")
     scripts_html = "\n".join(scripts)
 
-    html = shell.replace("/*__STYLES__*/", styles)
-    html = html.replace("/*__GRAPH__*/", _inline_json(graph))
-    html = html.replace("<!--__SCRIPTS__-->", scripts_html)
-    return html
+    title = graph.get("title") or DEFAULT_TITLE
+    out = shell.replace("/*__STYLES__*/", styles)
+    out = out.replace("<!--__TITLE__-->", html.escape(str(title)))
+    out = out.replace("/*__GRAPH__*/", _inline_json(graph))
+    out = out.replace("<!--__SCRIPTS__-->", scripts_html)
+    return out
 
 
-def write_html(graph: dict[str, Any], out_path: str | Path) -> Path:
+def write_html(
+    graph: dict[str, Any],
+    out_path: str | Path,
+    css: str | Path | None = None,
+    templates: str | Path | None = None,
+) -> Path:
     out_path = Path(out_path)
-    out_path.write_text(build_html(graph), encoding="utf-8")
+    out_path.write_text(build_html(graph, css=css, templates=templates), encoding="utf-8")
     return out_path

@@ -66,9 +66,9 @@ window.IOFlow = window.IOFlow || {};
     // 4. Edges.
     IOF.edges.renderAll(state);
 
-    // 5. Optional interaction modules (added across later milestones).
+    // 5. Optional interaction modules.
     IOF.state = state;
-    [IOF.pan, IOF.dim, IOF.drag, IOF.save].forEach((mod) => {
+    [IOF.pan, IOF.dim, IOF.drag, IOF.resize, IOF.save, IOF.live, IOF.collapse, IOF.ui].forEach((mod) => {
       if (mod && typeof mod.init === "function") mod.init(state);
     });
 
@@ -124,8 +124,10 @@ window.IOFlow = window.IOFlow || {};
             maxX = Math.max(maxX, c.x + c.w);
             maxY = Math.max(maxY, c.y + c.h);
           });
-          w = maxX + 16;
-          h = maxY + 16;
+          // A manually resized compound saves [x, y, w, h]; honor the saved
+          // size but never clip children out of it.
+          w = Math.max(maxX + 16, p[2] || 0);
+          h = Math.max(maxY + 16, p[3] || 0);
         } else {
           const r = state.nodeEls[n.id].getBoundingClientRect();
           w = Math.ceil(r.width);

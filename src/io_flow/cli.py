@@ -3,6 +3,7 @@
 Subcommands:
   build         compile YAML -> single-file diagram.html
   edit          build, serve on localhost, open browser (primary editing loop)
+  check         parse only; report unresolved references (CI-friendly)
   apply-layout  merge a layout.json into the source YAML (no-server fallback)
 """
 
@@ -18,15 +19,10 @@ from .parser import parse_file
 
 
 def _build_graph(input_path: Path):
-    graph = parse_file(input_path)
-    # Layout policy (topology hash) is applied here once layout_store exists.
-    try:
-        from . import layout_store
+    from . import layout_store
 
-        layout_store.annotate_graph(graph, input_path)
-    except Exception:
-        # Layout persistence is optional for a plain build.
-        pass
+    graph = parse_file(input_path)
+    layout_store.annotate_graph(graph, input_path)
     return graph
 
 
@@ -34,8 +30,9 @@ def cmd_build(args: argparse.Namespace) -> int:
     input_path = Path(args.input)
     out = Path(args.output) if args.output else input_path.with_suffix(".html")
     graph = _build_graph(input_path)
-    emit.write_html(graph, out)
-    print(f"wrote {out} ({len(graph['nodes'])} nodes, {len(graph['edges'])} edges)")
+    emit.write_html(graph, out, css=args.css, templates=args.templates)
+    slim = " (elkjs omitted: all positions pinned)" if emit.elk_omitted(graph) else ""
+    print(f"wrote {out} ({len(graph['nodes'])} nodes, {len(graph['edges'])} edges){slim}")
     return 0
 
 
@@ -43,8 +40,12 @@ def cmd_edit(args: argparse.Namespace) -> int:
     from . import server
 
     input_path = Path(args.input)
-    srv = server.LayoutServer(input_path, host="127.0.0.1", port=args.port)
+    srv = server.LayoutServer(
+        input_path, host="127.0.0.1", port=args.port, css=args.css, templates=args.templates
+    )
     url = srv.url
+    if srv.port != args.port:
+        print(f"port {args.port} in use; using {srv.port} instead")
     print(f"serving {input_path} at {url}  (drag nodes, click Save, Ctrl-C to stop)")
     if not args.no_browser:
         webbrowser.open(url)
@@ -55,6 +56,22 @@ def cmd_edit(args: argparse.Namespace) -> int:
     finally:
         srv.shutdown()
     return 0
+
+
+def cmd_check(args: argparse.Namespace) -> int:
+    import warnings
+
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        graph = parse_file(Path(args.input))
+    for w in caught:
+        print(f"warning: {w.message}", file=sys.stderr)
+    n_warn = len(caught)
+    print(
+        f"{args.input}: {len(graph['nodes'])} nodes, {len(graph['edges'])} edges, "
+        f"{n_warn} warning{'s' if n_warn != 1 else ''}"
+    )
+    return 1 if (args.strict and caught) else 0
 
 
 def cmd_apply_layout(args: argparse.Namespace) -> int:
@@ -75,16 +92,31 @@ def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="io-flow", description=__doc__)
     sub = p.add_subparsers(dest="command", required=True)
 
+    def add_skin_flags(sp):
+        sp.add_argument("--css", help="project-local CSS replacing the packaged viewer.css")
+        sp.add_argument(
+            "--templates", help="project-local JS replacing the packaged templates.js"
+        )
+
     b = sub.add_parser("build", help="compile YAML to a single-file diagram.html")
     b.add_argument("input", help="input YAML file")
     b.add_argument("-o", "--output", help="output HTML path (default: <input>.html)")
+    add_skin_flags(b)
     b.set_defaults(func=cmd_build)
 
     e = sub.add_parser("edit", help="build + serve + open browser (primary loop)")
     e.add_argument("input", help="input YAML file")
     e.add_argument("--port", type=int, default=8137, help="localhost port")
     e.add_argument("--no-browser", action="store_true", help="don't auto-open a browser")
+    add_skin_flags(e)
     e.set_defaults(func=cmd_edit)
+
+    c = sub.add_parser("check", help="parse only; report unresolved references")
+    c.add_argument("input", help="input YAML file")
+    c.add_argument(
+        "--strict", action="store_true", help="exit nonzero if any warnings are emitted"
+    )
+    c.set_defaults(func=cmd_check)
 
     a = sub.add_parser("apply-layout", help="merge a layout.json into the YAML")
     a.add_argument("input", help="input YAML file")

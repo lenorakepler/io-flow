@@ -62,7 +62,6 @@ nodes:
       value: False
       type: option
       description: skip validation
-
   classes:
     Config:
       loc: src/config.py
@@ -72,10 +71,49 @@ nodes:
         from_yaml:
           args:
             path: configfile
-
   functions:
     do_run:
       loc: src/run.py
       args:
         config: Config
         skip_preflight: skippreflight
+      # `calls:` draws an edge from this function to another function/method.
+      # Each key is the id of the callee; the value is optional edge-label text
+      # (use "" for no label).
+      calls:
+        Config.from_yaml: load config
+        preflight: ""
+      # `returns:` has the same structure as `calls:` -- each key is the id of
+      # the node this function returns a value to, the value is optional label.
+      returns:
+        report: qc report
+    preflight:
+      loc: src/run.py
+    report:
+      loc: src/run.py
+      # `label:` overrides the display name while the key stays the unique,
+      # addressable id -- handy when two nodes would otherwise share a name.
+      label: build_report
+  # `groups:` are compound containers that nest functions/classes/other groups
+  # (think "steps" or "workflows"). A group may also carry args/calls/returns of
+  # its own, behaving like a function. Nesting works at the top level or inside
+  # another group.
+  groups:
+    postprocess:
+      loc: src/post.py
+      functions:
+        summarize:
+          loc: src/post.py
+          calls:
+            plot: ""
+        plot:
+          loc: src/post.py
+
+# Explicit edges: an alternative to deriving edges from args/calls/returns.
+# `from`/`to` are node ids (direction as written); `type` is a tag
+# (conventionally args, calls, or returns); `label` is optional.
+edges:
+  - from: preflight
+    to: report
+    type: calls
+    label: validate

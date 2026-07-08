@@ -1,9 +1,20 @@
 /* engine/layout.js — ELK layout. INFRASTRUCTURE: rarely touched.
  *
  * Converts the graph model (flat nodes + parent pointers) into ELK's nested
- * form, measures leaf nodes from the live DOM, runs `layered` with
- * INCLUDE_CHILDREN so edges may cross the class/child hierarchy, and returns a
- * flat map { id: {x, y, w, h} } of *parent-relative* coordinates.
+ * form, measures leaf nodes from the live DOM, runs ELK with INCLUDE_CHILDREN
+ * so edges may cross the class/child hierarchy, and returns a flat map
+ * { id: {x, y, w, h} } of *parent-relative* coordinates.
+ *
+ * Per-diagram configuration comes from the YAML `diagram:` block (passed
+ * through as graph.diagram) and merges over the defaults:
+ *
+ *   diagram:
+ *     direction: DOWN        # RIGHT (default) | DOWN | LEFT | UP
+ *     algorithm: layered     # any elkjs algorithm name (mrtree, force, ...)
+ *     spacing: 40            # node-node spacing
+ *     layerSpacing: 70       # spacing between layers
+ *     elk:                   # raw ELK options, highest precedence
+ *       elk.layered.considerModelOrder.strategy: NODES_AND_EDGES
  */
 window.IOFlow = window.IOFlow || {};
 (function (IOF) {
@@ -19,10 +30,23 @@ window.IOFlow = window.IOFlow || {};
     "elk.padding": "[top=20,left=20,bottom=20,right=20]",
   };
 
-  // Room for the class header + inner padding around nested children.
-  const COMPOUND_OPTIONS = {
-    "elk.padding": "[top=40,left=16,bottom=16,right=16]",
-  };
+  function rootOptionsFor(graph) {
+    const o = Object.assign({}, ROOT_OPTIONS);
+    const cfg = graph.diagram || {};
+    if (cfg.direction) o["elk.direction"] = String(cfg.direction).toUpperCase();
+    if (cfg.algorithm) o["elk.algorithm"] = String(cfg.algorithm);
+    if (cfg.spacing != null) o["elk.spacing.nodeNode"] = String(cfg.spacing);
+    if (cfg.layerSpacing != null)
+      o["elk.layered.spacing.nodeNodeBetweenLayers"] = String(cfg.layerSpacing);
+    Object.assign(o, cfg.elk || {});
+    return o;
+  }
+
+  // Room for the compound header (height owned by --header-h in viewer.css)
+  // + inner padding around nested children.
+  function compoundOptions() {
+    return { "elk.padding": `[top=${IOF.headerH() + 8},left=16,bottom=16,right=16]` };
+  }
 
   function buildForest(graph) {
     const byId = {};
@@ -42,7 +66,7 @@ window.IOFlow = window.IOFlow || {};
     const { node, children } = entry;
     const out = { id: node.id };
     if (children.length) {
-      out.layoutOptions = COMPOUND_OPTIONS;
+      out.layoutOptions = compoundOptions();
       out.children = children.map((c) => toElk(c, domIndex, hints));
     } else {
       const el = domIndex[node.id];
@@ -63,7 +87,7 @@ window.IOFlow = window.IOFlow || {};
 
   async function run(graph, domIndex, hints) {
     const roots = buildForest(graph);
-    const rootOptions = Object.assign({}, ROOT_OPTIONS);
+    const rootOptions = rootOptionsFor(graph);
     if (hints && Object.keys(hints).length) {
       rootOptions["elk.interactive"] = "true";
     }

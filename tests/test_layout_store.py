@@ -107,3 +107,27 @@ def test_annotate_plain_elk_when_no_layout(yaml_copy):
     assert graph["_layout"]["mode"] == "elk"
     assert graph["_layout"]["notice"] is None
     assert graph["_layout"]["positions"] == {}
+
+
+def test_compound_size_round_trips(yaml_copy):
+    """Compounds save [x, y, w, h]; leaves stay [x, y]."""
+    graph = parse_file(yaml_copy)
+    positions = {"Config": [252, 193, 320, 240], "file1": [50, 117]}
+    layout_store.merge_positions(yaml_copy, graph, positions)
+
+    text = yaml_copy.read_text(encoding="utf-8")
+    assert "Config: [252, 193, 320, 240]" in text
+    assert "file1: [50, 117]" in text
+
+    saved = layout_store.read_layout(yaml_copy)
+    assert saved["positions"]["Config"] == [252.0, 193.0, 320.0, 240.0]
+    assert saved["positions"]["file1"] == [50.0, 117.0]
+
+
+def test_malformed_position_entries_are_skipped(yaml_copy):
+    graph = parse_file(yaml_copy)
+    layout_store.merge_positions(
+        yaml_copy, graph, {"file1": [1, 2], "Config": None, "do_run": [5]}
+    )
+    saved = layout_store.read_layout(yaml_copy)
+    assert saved["positions"] == {"file1": [1.0, 2.0]}

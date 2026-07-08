@@ -13,7 +13,6 @@ window.IOFlow = window.IOFlow || {};
 
   const THRESHOLD = 4; // px of screen movement before it counts as a drag
   const PAD = 6; // clamp inset inside a parent
-  const HEADER = 34; // keep children below the class header overlay
 
   function init(state) {
     state.graph.nodes.forEach((n) => {
@@ -54,7 +53,8 @@ window.IOFlow = window.IOFlow || {};
         const cw = state.pos[id].w;
         const ch = state.pos[id].h;
         nx = Math.max(PAD, Math.min(nx, pp.w - cw - PAD));
-        ny = Math.max(HEADER, Math.min(ny, pp.h - ch - PAD));
+        // Keep children below the compound header overlay (--header-h).
+        ny = Math.max(IOF.headerH() + 2, Math.min(ny, pp.h - ch - PAD));
       }
 
       state.pos[id].x = nx;

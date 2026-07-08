@@ -4,7 +4,8 @@ All writes go through ruamel.yaml round-trip mode so the comment-heavy source
 YAML survives a save-back untouched. Positions are stored parent-relative --
 exactly the coordinate space the viewer uses (`state.pos`) -- as compact
 flow-style ``nodeid: [x, y]`` entries under a ``layout:`` mapping, keyed by a
-``_topology`` hash.
+``_topology`` hash. Compound nodes (classes/groups) store ``[x, y, w, h]`` so
+a manually resized container keeps its size across restores.
 
 Restore policy (applied by :func:`annotate_graph`):
   * saved hash matches current topology  -> restore positions, browser skips ELK
@@ -64,9 +65,13 @@ def read_layout(path: str | Path) -> dict[str, Any] | None:
             hash_ = str(value)
             continue
         try:
-            positions[str(key)] = [float(value[0]), float(value[1])]
-        except (TypeError, ValueError, IndexError):
+            nums = [float(v) for v in list(value)[:4]]
+        except (TypeError, ValueError):
             continue
+        if len(nums) < 2:
+            continue
+        # [x, y] for leaves, [x, y, w, h] for resized compounds.
+        positions[str(key)] = nums
     return {"hash": hash_, "positions": positions}
 
 
@@ -117,16 +122,19 @@ def merge_positions(
         lay.clear()  # regenerate contents; the block itself is machine-owned
 
     lay["_topology"] = topology_hash(graph)
-    known = {n["id"] for n in graph["nodes"]}
     for node in graph["nodes"]:
         p = positions.get(node["id"])
-        if p is None:
+        # Silently ignore positions for ids not in the graph (stale client
+        # state) and malformed entries.
+        try:
+            vals = [_num(v) for v in list(p)[: 4 if len(p) >= 4 else 2]]
+        except (TypeError, ValueError):
             continue
-        seq = CommentedSeq([_num(p[0]), _num(p[1])])
+        if len(vals) < 2:
+            continue
+        seq = CommentedSeq(vals)
         seq.fa.set_flow_style()
         lay[node["id"]] = seq
-    # Silently ignore positions for ids not in the graph (stale client state).
-    del known
 
     with open(path, "w", encoding="utf-8") as fh:
         yaml.dump(data, fh)

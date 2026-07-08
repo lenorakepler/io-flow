@@ -100,34 +100,18 @@ window.IOFlow = window.IOFlow || {};
     hideSidebar();
   }
 
-  // ---- Sidebar -------------------------------------------------------------
-  function renderMap(obj) {
-    const rows = Object.entries(obj || {})
-      .map(([k, v]) => `<div><code>${IOF.esc(k)}</code>: ${IOF.esc(v)}</div>`)
-      .join("");
-    return rows || "<em>—</em>";
-  }
-
+  // ---- Sidebar ---------------------------------------------------------------
+  // Detail markup comes from the user-editable surface (IOF.renderSidebar /
+  // IOF.sidebars in templates.js); this engine owns only the chrome.
   function showSidebar(state, id) {
     const node = state.graph.nodes.find((n) => n.id === id);
     if (!node) return;
     const sb = document.getElementById("sidebar");
-    const d = node.data || {};
-    let rows = "";
-    const add = (k, v) => (rows += `<dt>${IOF.esc(k)}</dt><dd>${v}</dd>`);
-
-    if (d.cli) add("cli", `<code>${IOF.esc(d.cli)}</code>`);
-    if (d.value !== undefined && d.value !== "") add("value", IOF.esc(d.value));
-    if (d.description) add("description", IOF.esc(d.description));
-    if (d.loc) add("loc", `<code>${IOF.esc(d.loc)}</code>`);
-    if (d.args) add("args", renderMap(d.args));
-    if (node.type === "attributes") add("attributes", renderMap(d));
-
     sb.innerHTML =
       `<button class="sb-close" type="button" aria-label="Close">&times;</button>` +
       `<div class="sb-type">${IOF.esc(node.type)}</div>` +
       `<h2>${IOF.esc(node.id)}</h2>` +
-      `<dl>${rows || "<dt>—</dt><dd></dd>"}</dl>`;
+      IOF.renderSidebar(node);
     sb.hidden = false;
     sb.querySelector(".sb-close").addEventListener("click", () => clear(state));
   }

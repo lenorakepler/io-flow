@@ -57,7 +57,11 @@ window.IOFlow = window.IOFlow || {};
     const positions = {};
     state.graph.nodes.forEach((n) => {
       const p = state.pos[n.id];
-      if (p) positions[n.id] = [Math.round(p.x), Math.round(p.y)];
+      if (!p) return;
+      // Compounds persist their (possibly hand-resized) size too.
+      positions[n.id] = state.childMount[n.id]
+        ? [Math.round(p.x), Math.round(p.y), Math.round(p.w), Math.round(p.h)]
+        : [Math.round(p.x), Math.round(p.y)];
     });
     btn.disabled = true;
     btn.textContent = "Saving…";
@@ -70,6 +74,9 @@ window.IOFlow = window.IOFlow || {};
       if (!r.ok) throw new Error("HTTP " + r.status);
       dirty = false;
       btn.textContent = "Saved";
+      // Our own write just changed the YAML's mtime; rebase the live-reload
+      // watcher so it doesn't count as an external edit.
+      if (IOF.live) IOF.live.resync();
     } catch (e) {
       console.error("[io-flow] save failed:", e);
       btn.textContent = "Save failed";

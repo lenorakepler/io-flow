@@ -7,6 +7,10 @@
  */
 
 :root {
+  /* Compound-node header height. The engine reads this via IOF.headerH() for
+   * ELK padding, drag clamping, and collapse — change it here only. */
+  --header-h: 32px;
+
   --bg: #f6f7f9;
   --ink: #1f2933;
   --muted: #6b7280;
@@ -20,6 +24,7 @@
   --method: #db2777;
   --class: #334155;
   --attr: #0891b2;
+  --group: #b45309;
 }
 
 * { box-sizing: border-box; }
@@ -63,6 +68,19 @@ html, body {
   transition: opacity 0.18s ease;
 }
 #edges #arrow path { fill: var(--edge); }
+
+/* Per-type edge styling — every edge carries `edge--<type>` (the YAML edge
+ * kind: args / calls / returns / any custom tag). Add rules freely. */
+.edge--calls { stroke-dasharray: 6 4; }
+.edge--returns { stroke-dasharray: 2 3; }
+#edges .edge-label {
+  fill: var(--muted);
+  font: 11px ui-sans-serif, system-ui, sans-serif;
+  paint-order: stroke;
+  stroke: var(--bg, #fff);
+  stroke-width: 3px;
+  dominant-baseline: middle;
+}
 
 /* ---- Nodes ---------------------------------------------------------------- */
 .node {
@@ -120,7 +138,7 @@ html, body {
   top: 0;
   left: 0;
   right: 0;
-  height: 32px;
+  height: var(--header-h);
   display: flex;
   align-items: center;
   gap: 8px;
@@ -134,6 +152,113 @@ html, body {
   position: absolute;
   inset: 0;   /* origin == class node origin, matching ELK child coords */
 }
+
+/* Compound group node: same overlay-header + inset-children layout as class,
+ * with its own accent so groups read as a distinct container. */
+.node--group {
+  background: rgba(180, 83, 9, 0.05);
+  border: 1px dashed var(--group);
+  max-width: none;
+  padding: 0;
+  cursor: pointer;
+}
+.node--group .node__header {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: var(--header-h);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 10px;
+  border-bottom: 1px dashed var(--group);
+  background: rgba(180, 83, 9, 0.1);
+  border-radius: 8px 8px 0 0;
+  z-index: 1;
+}
+.node--group .node__children {
+  position: absolute;
+  inset: 0;
+}
+
+/* ---- Resize handle (compounds only) ----------------------------------------- */
+.node__resize {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 14px;
+  height: 14px;
+  cursor: nwse-resize;
+  z-index: 2;
+  touch-action: none;
+}
+.node__resize::after {
+  content: "";
+  position: absolute;
+  right: 3px;
+  bottom: 3px;
+  width: 7px;
+  height: 7px;
+  border-right: 2px solid var(--line);
+  border-bottom: 2px solid var(--line);
+  border-radius: 0 0 3px 0;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+.node:hover > .node__resize::after { opacity: 1; }
+.node--collapsed .node__resize { display: none; }
+
+/* ---- Collapse --------------------------------------------------------------- */
+.node--collapsed .node__children { display: none; }
+.node--collapsed .node__header { border-bottom: none; border-radius: 8px; }
+.node__collapse {
+  border: none;
+  background: none;
+  cursor: pointer;
+  font-size: 11px;
+  line-height: 1;
+  color: var(--muted);
+  padding: 2px;
+}
+
+/* ---- HUD: search + legend --------------------------------------------------- */
+#hud {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  z-index: 25;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: flex-start;
+}
+#search {
+  width: 200px;
+  padding: 6px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  font: inherit;
+  font-size: 13px;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.06);
+}
+#legend {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+/* Legend rows are mini node chips (`.node node--<type>`) so they follow any
+ * user styling automatically; the overrides below undo positioning only. */
+#legend .node {
+  position: static;
+  padding: 2px 8px;
+  font-size: 11px;
+  cursor: default;
+  max-width: none;
+  box-shadow: none;
+}
+#legend .node .node__title { font-weight: 500; font-size: 11px; }
 
 /* ---- Dim (M3) ------------------------------------------------------------- */
 .dimmed { opacity: 0.12; }

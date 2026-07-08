@@ -3,7 +3,7 @@ name = "io-flow"
 version = "0.1.0"
 description = "YAML -> interactive, single-file HTML dependency/dataflow diagrams"
 readme = "README.md"
-requires-python = ">=3.13"
+requires-python = ">=3.10"
 dependencies = [
     "ruamel.yaml>=0.18",
 ]
