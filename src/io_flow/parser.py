@@ -40,6 +40,10 @@ Rules:
   a phantom edge. An unmarked string that *exactly matches* a node id draws an
   ``UnmarkedReferenceWarning`` (a forgotten ``$`` silently drops an edge
   otherwise). Both sides ``$``-marked is an error.
+* **Explicit ``edges:`` lists may live at top level or inside any node.**
+  Inside a node, an omitted ``from``/``to`` defaults to the declaring node.
+  Placement is organization only and never changes meaning: references are
+  always full paths. (``edges`` is therefore a reserved key in node mappings.)
 * **Two-pass.** Every node id is collected first, then references are
   resolved, so forward references work regardless of document order.
 * Unresolved ``$refs`` emit a loud ``UnresolvedReferenceWarning`` listing
@@ -172,6 +176,16 @@ def parse(data: dict[str, Any]) -> dict[str, Any]:
     # Unmarked strings in relation blocks, checked in pass 2 against node ids
     # (a forgotten $ silently drops an edge; make that loud).
     literals: list[tuple[str, str, str]] = []  # (owner, edge_type, text)
+    # Explicit `edges:` entries, top-level (owner None) or declared inside a
+    # node (owner = that node's id, filling an omitted from/to endpoint).
+    explicit: list[tuple[str | None, Any]] = []
+
+    def record_explicit(owner: str | None, block: Any) -> None:
+        where = f"on {SIGIL}{owner}" if owner else "at top level"
+        if not isinstance(block, list):
+            raise ValueError(f"edges: {where} must be a list of edge mappings")
+        for espec in block:
+            explicit.append((owner, espec))
 
     def record_edges(node_id: str, spec: dict[str, Any]) -> None:
         """Queue every relation-block entry on ``spec`` for pass 2."""
@@ -217,7 +231,15 @@ def parse(data: dict[str, Any]) -> dict[str, Any]:
         node_type = str(spec["type"]) if spec.get("type") is not None else default_type(parent_type)
         label = spec.get("label")
         children = {k: v for k, v in spec.items() if str(k).startswith(SIGIL)}
-        node_data = {str(k): v for k, v in spec.items() if not str(k).startswith(SIGIL)}
+        # `edges` is reserved inside a node: a locally-declared explicit-edge
+        # list (an omitted from/to defaults to this node), not sidebar data.
+        if "edges" in spec:
+            record_explicit(node_id, spec["edges"])
+        node_data = {
+            str(k): v
+            for k, v in spec.items()
+            if not str(k).startswith(SIGIL) and k != "edges"
+        }
         nodes.append(
             {
                 "id": node_id,
@@ -278,28 +300,39 @@ def parse(data: dict[str, Any]) -> dict[str, Any]:
                 stacklevel=2,
             )
 
-    # --- Pass 2b: explicit top-level edges ------------------------------------
+    # --- Pass 2b: explicit edges ----------------------------------------------
     # A direct alternative to deriving edges from relation blocks:
     #   edges:
     #     - {from: $a, to: $b, type: calls, label: "..."}
     # `from`/`to` are $-marked node refs (direction as written); `type` is a
-    # free tag (conventionally a relation name); `label` is optional.
-    for spec in data.get("edges") or []:
+    # free tag (conventionally a relation name); `label` is optional. The list
+    # may live at top level or inside a node, where an omitted from/to
+    # defaults to the declaring node. Placement never changes meaning: refs
+    # are always full paths.
+    if data.get("edges") is not None:
+        record_explicit(None, data["edges"])
+    for owner, spec in explicit:
         spec = _plain(spec) or {}
         source = spec.get("from")
         dest = spec.get("to")
-        if not source or not dest:
+        if owner is None and (not source or not dest):
             raise ValueError(
-                f"explicit edge {spec!r} must have both 'from' and 'to' node references"
+                f"explicit edge {spec!r} must have both 'from' and 'to' node "
+                f"references (only edges declared inside a node may omit one)"
             )
-        source, dest = str(source), str(dest)
-        unmarked = [r for r in (source, dest) if not r.startswith(SIGIL)]
+        if not source and not dest:
+            raise ValueError(
+                f"edge {spec!r} on {SIGIL}{owner}: at least one of 'from'/'to' "
+                f"is required (the omitted side defaults to the declaring node)"
+            )
+        unmarked = [str(r) for r in (source, dest) if r is not None and not str(r).startswith(SIGIL)]
         if unmarked:
             raise ValueError(
-                f"explicit edge {source} -> {dest}: from/to are node references "
+                f"explicit edge {spec!r}: from/to are node references "
                 f"and must be $-marked ({', '.join(SIGIL + u for u in unmarked)})"
             )
-        source, dest = _strip(source), _strip(dest)
+        source = _strip(str(source)) if source is not None else owner
+        dest = _strip(str(dest)) if dest is not None else owner
         missing = [nid for nid in (source, dest) if nid not in node_ids]
         if missing:
             for nid in missing:

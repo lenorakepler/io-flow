@@ -68,6 +68,7 @@ Top-level keys:
 - **`nodes:`** — the node declarations (every key must be a `$name`).
 - **`edges:`** — explicit edges: `- {from: $a, to: $b, type: calls, label: "..."}`.
   `type` is a free tag; every edge's type becomes an `edge--<type>` CSS class.
+  An `edges:` list may also live inside any node (below).
 - **`relations:`** — register new relationship kinds (below).
 - **`defaults:`** — default types for untyped nodes (below).
 - **`diagram:`** — per-diagram layout config (below).
@@ -83,6 +84,10 @@ Inside a node's mapping:
   class, no registration anywhere.
 - **`label:`** — display-name override (the path id stays the unique key).
 - **relation names** (`args`/`calls`/`returns`/registered) — edge blocks.
+- **`edges:`** — a locally-declared explicit-edge list, handy for keeping a
+  group's internal wiring inside the group. An omitted `from`/`to` defaults
+  to the declaring node. Placement is organization only: references are
+  always full paths, so moving the list never changes its meaning.
 - **anything else** — free data (`loc:`, `cli:`, `description:`, ...) shown in
   the sidebar and available to templates.
 

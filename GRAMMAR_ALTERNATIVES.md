@@ -147,6 +147,8 @@ block, and path-qualified ids all carry over unchanged.
      `UnmarkedReferenceWarning` and the both-sides-`$` error (meaningless
      without the mark).
    - Explicit `edges:`: `from`/`to` are plain ids (no `$` requirement).
+     Node-level `edges:` lists and owner-defaulting carry over unchanged
+     (`edges` stays a reserved property either way).
    - Keep: path-qualified ids from nesting, dot-ban in names, `defaults:`,
      label-defaults-to-short-name, two-pass resolve, dedupe, `diagram:`
      passthrough.

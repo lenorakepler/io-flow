@@ -316,6 +316,87 @@ def test_explicit_edge_unmarked_ref_is_error():
         parse({"nodes": {"$a": {}, "$b": {}}, "edges": [{"from": "a", "to": "$b"}]})
 
 
+def test_node_level_edges_block():
+    """An edges: list inside a node behaves exactly like the top-level one."""
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        graph = parse(
+            {
+                "nodes": {
+                    "$g": {
+                        "type": "group",
+                        "$a": {},
+                        "$b": {},
+                        "edges": [
+                            {"from": "$g.a", "to": "$g.b", "type": "passes", "label": "baton"},
+                        ],
+                    }
+                }
+            }
+        )
+    assert ("g.a", "g.b", "passes") in _labeled_edges_typed(graph)
+    assert ("g.a", "g.b", "baton") in _labeled_edges(graph)
+    # `edges` is reserved: it is consumed, not sidebar data.
+    assert "edges" not in _node(graph, "g")["data"]
+
+
+def test_node_level_edge_defaults_omitted_endpoint_to_owner():
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        graph = parse(
+            {
+                "nodes": {
+                    "$x": {},
+                    "$g": {
+                        "type": "group",
+                        "edges": [
+                            {"to": "$x", "type": "emits"},   # from: defaults to $g
+                            {"from": "$x", "type": "feeds"},  # to: defaults to $g
+                        ],
+                    },
+                }
+            }
+        )
+    assert ("g", "x", "emits") in _labeled_edges_typed(graph)
+    assert ("x", "g", "feeds") in _labeled_edges_typed(graph)
+
+
+def test_node_level_edge_with_both_endpoints_omitted_is_error():
+    with pytest.raises(ValueError, match="at least one"):
+        parse({"nodes": {"$g": {"edges": [{"type": "loop"}]}}})
+
+
+def test_node_level_edge_unmarked_ref_is_error():
+    with pytest.raises(ValueError, match=r"\$-marked"):
+        parse({"nodes": {"$x": {}, "$g": {"edges": [{"to": "x"}]}}})
+
+
+def test_node_level_edges_must_be_a_list():
+    with pytest.raises(ValueError, match="list"):
+        parse({"nodes": {"$g": {"edges": {"to": "$g"}}}})
+
+
+def test_top_level_edge_still_requires_both_endpoints():
+    with pytest.raises(ValueError, match="both"):
+        parse({"nodes": {"$a": {}}, "edges": [{"to": "$a"}]})
+
+
+def test_node_level_and_top_level_edges_dedupe_together():
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        graph = parse(
+            {
+                "nodes": {
+                    "$a": {"edges": [{"to": "$b", "type": "passes"}]},
+                    "$b": {},
+                },
+                "edges": [{"from": "$a", "to": "$b", "type": "passes"}],
+            }
+        )
+    passes = [e for e in graph["edges"] if e.get("type") == "passes"]
+    assert len(passes) == 1
+
+
 def test_explicit_edge_unknown_node_warns():
     with pytest.warns(UnresolvedReferenceWarning, match="ghost"):
         graph = parse(
