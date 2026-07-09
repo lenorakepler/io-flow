@@ -45,57 +45,86 @@ elkjs entirely and the artifact drops from ~1.7 MB to tens of KB.
 
 ## Input format
 
-See [`example_input.yaml`](example_input.yaml) for a worked example. Top-level
-keys:
+**`$name` means node, everywhere.** A key starting with `$` declares a node;
+a `$`-marked key or string value inside a relation block references one. One
+rule covers declaration, nesting, and reference. See
+[`example_input.yaml`](example_input.yaml) for a worked example.
+
+```yaml
+defaults:
+  class: method              # untyped children of a class are methods
+nodes:
+  $configfile: {type: file, cli: --config}
+  $Config:
+    type: class
+    loc: src/config.py       # not reserved, not $-marked: free sidebar data
+    $from_yaml:              # child node; id "Config.from_yaml"
+      args: {path: $configfile}
+```
+
+Top-level keys:
 
 - **`title:`** — the HTML page title (defaults to the filename).
-- **`nodes:`** — the node declarations (below).
-- **`edges:`** — explicit edges: `- {from: a, to: b, type: calls, label: "..."}`.
+- **`nodes:`** — the node declarations (every key must be a `$name`).
+- **`edges:`** — explicit edges: `- {from: $a, to: $b, type: calls, label: "..."}`.
   `type` is a free tag; every edge's type becomes an `edge--<type>` CSS class.
 - **`relations:`** — register new relationship kinds (below).
+- **`defaults:`** — default types for untyped nodes (below).
 - **`diagram:`** — per-diagram layout config (below).
 - **`layout:`** — machine-owned block written by Save; don't edit by hand.
 
-Under `nodes:`:
+Inside a node's mapping:
 
-- **`input:`** — files / options / parameters. `type:` is free-form and maps
-  straight to a template + `.node--<type>` CSS class.
-- **`classes:`** — a compound node wrapping an `attributes:` node and each
-  method. Class members get qualified ids (`Config.from_yaml`).
-- **`functions:`** — processing nodes.
-- **`groups:`** — compound containers nesting functions/classes/other groups
-  ("steps", "workflows"). A group may carry `args`/`calls`/`returns` of its
-  own, behaving like a function.
+- **`$name:`** — a child node. Compound-ness is a state, not a type: any node
+  with `$`-children is a container. Ids are dotted paths (`$postprocess` >
+  `$plot` → `postprocess.plot`); names can't contain `.`; references always
+  use the full path. Labels default to the short name.
+- **`type:`** — free-form; maps straight to a template + `.node--<type>` CSS
+  class, no registration anywhere.
+- **`label:`** — display-name override (the path id stays the unique key).
+- **relation names** (`args`/`calls`/`returns`/registered) — edge blocks.
+- **anything else** — free data (`loc:`, `cli:`, `description:`, ...) shown in
+  the sidebar and available to templates.
 
-Any node takes `label:` (display name; the key stays the unique id) and free
-data keys (`loc:`, `description:`, ...) shown in the sidebar.
+**Edge derivation.** References are self-marking: inside a relation block,
+whichever side of an entry wears the `$` is the reference; the unmarked side
+is a literal (arg name, edge-label text, or default value). Unmarked strings
+can never create an edge, so free text in `value:`/`cli:`/`description:` is
+always safe. Built-ins:
 
-**Edge derivation.** Edges come only from registered reference positions,
-matched exactly against node ids — free text in `value:`/`cli:`/`description:`
-never creates an edge. Built-ins:
+| key        | direction               | example |
+|------------|-------------------------|---------|
+| `args:`    | referenced node → owner | `args: {path: $configfile, retries: 3}` |
+| `calls:`   | owner → referenced node | `calls: {$Config.from_yaml: "load config"}` |
+| `returns:` | owner → referenced node | `returns: {$report: ""}` |
 
-| key        | direction              | reference position        |
-|------------|------------------------|---------------------------|
-| `args:`    | referenced node → owner | entry **values** (non-strings are literal defaults) |
-| `calls:`   | owner → referenced node | entry **keys** (values are optional edge labels) |
-| `returns:` | owner → referenced node | entry **keys** (values are optional edge labels) |
-
-Duplicate ids are a hard error; an unresolved reference prints a loud warning
-listing close candidates (`io-flow check --strict` turns those into a failing
-exit code).
+An unresolved `$ref` prints a loud warning listing close candidates; an
+unmarked string that exactly matches a node id warns that a `$` may be missing
+(`io-flow check --strict` turns warnings into a failing exit code).
 
 **Registering new relationship kinds.** `relations:` extends that table per
-diagram, no code required:
+diagram, no code required. Because references self-mark, a relation declares
+only its direction:
 
 ```yaml
 relations:
-  emits: {direction: out}             # ref: key is the default
-  reads: {direction: in, ref: value}
+  emits: {direction: out}
+  reads: {direction: in}
 
 nodes:
-  functions:
-    a:
-      emits: {log: "event"}           # a -> log, labeled, class edge--emits
+  $log: {type: file}
+  $a: {emits: {$log: "event"}}        # a -> log, labeled, class edge--emits
+```
+
+**Default types.** Untyped nodes get `type: node`. The `defaults:` block maps
+a parent type to its children's default (`_root` covers top-level nodes), so
+terse declarations stay correct:
+
+```yaml
+defaults:
+  class: method
+  group: function
+  _root: input
 ```
 
 **Layout config.** `diagram:` merges over the ELK defaults:

@@ -1,4 +1,4 @@
-"""M1 acceptance tests: parser produces the exact expected graph model."""
+"""Parser acceptance tests: the $-grammar produces the exact expected graph model."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 
 from io_flow.parser import (
-    DuplicateNodeError,
+    UnmarkedReferenceWarning,
     UnresolvedReferenceWarning,
     parse,
     parse_file,
@@ -54,31 +54,57 @@ def test_example_edges_exact():
         ("do_run", "report"),
         # explicit top-level `edges:` entry (from -> to as written).
         ("preflight", "report"),
-        # a call between two functions nested in a group.
-        ("summarize", "plot"),
+        # a call between two functions nested in a group (path-qualified ids).
+        ("postprocess.summarize", "postprocess.plot"),
     }
     assert _edge_set(graph) == expected
 
 
-def test_no_phantom_edges_from_free_text():
-    """value:/cli:/description: content must never produce edges."""
-    graph = parse(
-        {
-            "nodes": {
-                "input": {
-                    # value happens to equal another node's id -> must NOT match
-                    "alpha": {"value": "beta", "type": "file"},
-                    "beta": {"cli": "--beta", "type": "option"},
-                    # description/cli that look like ids -> must NOT match
-                    "gamma": {"cli": "beta", "description": "alpha", "type": "file"},
+def test_unmarked_strings_never_produce_edges():
+    """Unmarked strings are literals: free text can never spawn a phantom edge."""
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        graph = parse(
+            {
+                "nodes": {
+                    # value/cli/description that look like ids -> must NOT match.
+                    "$alpha": {"value": "beta", "type": "file"},
+                    "$beta": {"cli": "--beta", "type": "option"},
+                    "$gamma": {"cli": "beta", "description": "alpha", "type": "file"},
                 }
             }
-        }
-    )
+        )
     assert _edge_set(graph) == set()
 
 
-def test_node_hierarchy_and_types():
+def test_unmarked_string_in_relation_block_makes_no_edge():
+    """Inside a relation block an unmarked match still makes no edge (it warns)."""
+    with pytest.warns(UnmarkedReferenceWarning):
+        graph = parse(
+            {
+                "nodes": {
+                    "$beta": {"type": "file"},
+                    "$f": {"args": {"x": "beta"}},
+                }
+            }
+        )
+    assert _edge_set(graph) == set()
+
+
+def test_unmarked_literal_matching_a_node_id_warns():
+    """A forgotten $ silently drops an edge -- the parser makes that loud."""
+    with pytest.warns(UnmarkedReferenceWarning, match="beta"):
+        parse(
+            {
+                "nodes": {
+                    "$beta": {"type": "file"},
+                    "$f": {"args": {"x": "beta"}},
+                }
+            }
+        )
+
+
+def test_node_hierarchy_types_and_data():
     graph = parse_file(EXAMPLE)
 
     assert _node(graph, "file1")["type"] == "file"
@@ -95,7 +121,7 @@ def test_node_hierarchy_and_types():
     assert attrs["parent"] == "Config"
 
     method = _node(graph, "Config.from_yaml")
-    assert method["type"] == "method"
+    assert method["type"] == "method"  # via defaults: {class: method}
     assert method["parent"] == "Config"
 
     fn = _node(graph, "do_run")
@@ -108,28 +134,24 @@ def test_forward_reference_resolves():
     graph = parse(
         {
             "nodes": {
-                "functions": {
-                    "runner": {"args": {"cfg": "late_input"}},
-                },
-                "input": {
-                    "late_input": {"type": "file"},
-                },
+                "$runner": {"args": {"cfg": "$late_input"}},
+                "$late_input": {"type": "file"},
             }
         }
     )
     assert ("late_input", "runner") in _edge_set(graph)
 
 
-def test_duplicate_id_is_hard_error():
-    with pytest.raises(DuplicateNodeError):
-        parse(
-            {
-                "nodes": {
-                    "input": {"Config": {"type": "file"}},
-                    "classes": {"Config": {"loc": "x.py"}},
-                }
-            }
-        )
+def test_unmarked_top_level_key_is_error():
+    """Under nodes: there is no owner node, so unmarked keys are errors."""
+    with pytest.raises(ValueError, match="loose_data"):
+        parse({"nodes": {"loose_data": {"type": "file"}}})
+
+
+def test_dot_in_node_name_is_error():
+    """Dots separate path segments in ids, so declared names can't contain them."""
+    with pytest.raises(ValueError, match=r"\."):
+        parse({"nodes": {"$a.b": {}}})
 
 
 def test_unresolved_reference_warns_with_candidates():
@@ -137,11 +159,9 @@ def test_unresolved_reference_warns_with_candidates():
         graph = parse(
             {
                 "nodes": {
-                    "input": {"configfile": {"type": "file"}},
-                    "functions": {
-                        # typo: 'configfil' should suggest 'configfile'
-                        "loader": {"args": {"path": "configfil"}},
-                    },
+                    "$configfile": {"type": "file"},
+                    # typo: '$configfil' should suggest '$configfile'
+                    "$loader": {"args": {"path": "$configfil"}},
                 }
             }
         )
@@ -155,11 +175,9 @@ def test_calls_creates_caller_to_callee_edge_with_label():
         graph = parse(
             {
                 "nodes": {
-                    "functions": {
-                        "a": {"calls": {"b": "does the thing", "c": ""}},
-                        "b": {},
-                        "c": {},
-                    }
+                    "$a": {"calls": {"$b": "does the thing", "$c": ""}},
+                    "$b": {},
+                    "$c": {},
                 }
             }
         )
@@ -168,16 +186,41 @@ def test_calls_creates_caller_to_callee_edge_with_label():
     assert ("a", "c", None) in _labeled_edges(graph)
 
 
+def test_relation_reference_works_on_either_side():
+    """Whichever side wears the $ is the reference -- no key/value axis."""
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        graph = parse(
+            {
+                "nodes": {
+                    "$cfg": {"type": "file"},
+                    # value-side ref: unmarked key is the arg name.
+                    "$f": {"args": {"path": "$cfg"}},
+                    # key-side ref (same relation): unmarked value is a label.
+                    "$g": {"args": {"$cfg": "raw"}},
+                }
+            }
+        )
+    assert ("cfg", "f", None) in _labeled_edges(graph)
+    assert ("cfg", "g", "raw") in _labeled_edges(graph)
+
+
+def test_both_sides_marked_is_error():
+    with pytest.raises(ValueError, match="both"):
+        parse({"nodes": {"$a": {"calls": {"$b": "$c"}}, "$b": {}, "$c": {}}})
+
+
 def test_method_calls_are_resolved():
     with warnings.catch_warnings():
         warnings.simplefilter("error")
         graph = parse(
             {
                 "nodes": {
-                    "classes": {
-                        "Runner": {"methods": {"go": {"calls": {"helper": "step"}}}},
+                    "$Runner": {
+                        "type": "class",
+                        "$go": {"calls": {"$helper": "step"}},
                     },
-                    "functions": {"helper": {}},
+                    "$helper": {},
                 }
             }
         )
@@ -190,15 +233,14 @@ def test_returns_creates_source_to_target_edge_with_label():
         graph = parse(
             {
                 "nodes": {
-                    "classes": {
-                        "Runner": {"methods": {"go": {"returns": {"out": "result"}}}},
+                    "$Runner": {
+                        "type": "class",
+                        "$go": {"returns": {"$out": "result"}},
                     },
-                    "functions": {
-                        "a": {"returns": {"b": "the value", "c": ""}},
-                        "b": {},
-                        "c": {},
-                    },
-                    "input": {"out": {"type": "file"}},
+                    "$a": {"returns": {"$b": "the value", "$c": ""}},
+                    "$b": {},
+                    "$c": {},
+                    "$out": {"type": "file"},
                 }
             }
         )
@@ -208,36 +250,18 @@ def test_returns_creates_source_to_target_edge_with_label():
     assert ("Runner.go", "out", "result") in _labeled_edges(graph)
 
 
-def test_unresolved_return_target_warns_and_makes_no_edge():
-    with pytest.warns(UnresolvedReferenceWarning, match="report"):
+def test_unresolved_reference_makes_no_edge():
+    with pytest.warns(UnresolvedReferenceWarning, match="reprt"):
         graph = parse(
             {
                 "nodes": {
-                    "functions": {
-                        "a": {"returns": {"reprt": ""}},
-                        "report": {},
-                    }
+                    "$a": {"returns": {"$reprt": ""}},
+                    "$report": {},
                 }
             }
         )
     assert ("a", "reprt") not in _edge_set(graph)
     assert ("a", "report") not in _edge_set(graph)
-
-
-def test_unresolved_call_target_warns_and_makes_no_edge():
-    with pytest.warns(UnresolvedReferenceWarning, match="helpr"):
-        graph = parse(
-            {
-                "nodes": {
-                    "functions": {
-                        "a": {"calls": {"helpr": ""}},
-                        "helper": {},
-                    }
-                }
-            }
-        )
-    assert ("a", "helpr") not in _edge_set(graph)
-    assert ("a", "helper") not in _edge_set(graph)
 
 
 def test_derived_edges_carry_their_type():
@@ -246,15 +270,13 @@ def test_derived_edges_carry_their_type():
         graph = parse(
             {
                 "nodes": {
-                    "input": {"cfg": {"type": "file"}},
-                    "functions": {
-                        "a": {
-                            "args": {"c": "cfg"},
-                            "calls": {"b": ""},
-                            "returns": {"b": ""},
-                        },
-                        "b": {},
+                    "$cfg": {"type": "file"},
+                    "$a": {
+                        "args": {"c": "$cfg"},
+                        "calls": {"$b": ""},
+                        "returns": {"$b": ""},
                     },
+                    "$b": {},
                 }
             }
         )
@@ -270,10 +292,10 @@ def test_explicit_edges_block():
         warnings.simplefilter("error")
         graph = parse(
             {
-                "nodes": {"functions": {"a": {}, "b": {}}},
+                "nodes": {"$a": {}, "$b": {}},
                 "edges": [
-                    {"from": "a", "to": "b", "type": "calls", "label": "go"},
-                    {"from": "b", "to": "a"},  # type/label optional
+                    {"from": "$a", "to": "$b", "type": "calls", "label": "go"},
+                    {"from": "$b", "to": "$a"},  # type/label optional
                 ],
             }
         )
@@ -286,15 +308,20 @@ def test_explicit_edges_block():
 
 def test_explicit_edge_missing_endpoint_is_error():
     with pytest.raises(ValueError):
-        parse({"nodes": {"functions": {"a": {}}}, "edges": [{"from": "a"}]})
+        parse({"nodes": {"$a": {}}, "edges": [{"from": "$a"}]})
+
+
+def test_explicit_edge_unmarked_ref_is_error():
+    with pytest.raises(ValueError, match=r"\$-marked"):
+        parse({"nodes": {"$a": {}, "$b": {}}, "edges": [{"from": "a", "to": "$b"}]})
 
 
 def test_explicit_edge_unknown_node_warns():
     with pytest.warns(UnresolvedReferenceWarning, match="ghost"):
         graph = parse(
             {
-                "nodes": {"functions": {"a": {}}},
-                "edges": [{"from": "a", "to": "ghost"}],
+                "nodes": {"$a": {}},
+                "edges": [{"from": "$a", "to": "$ghost"}],
             }
         )
     assert _edge_set(graph) == set()
@@ -304,42 +331,36 @@ def test_node_label_overrides_display_name_but_not_id():
     graph = parse(
         {
             "nodes": {
-                "functions": {
-                    "run_v2": {"label": "run"},
-                    "helper": {},
-                },
-                "classes": {
-                    "Runner": {"methods": {"go_fast": {"label": "go"}}},
-                },
+                "$run_v2": {"label": "run"},
+                "$helper": {},
+                "$Runner": {"type": "class", "$go_fast": {"label": "go"}},
             }
         }
     )
-    # id stays the unique key; label carries the display name.
+    # id stays the unique path; label carries the display name.
     assert _node(graph, "run_v2")["label"] == "run"
-    # unlabeled function falls back to its id.
+    # unlabeled node falls back to its short name.
     assert _node(graph, "helper")["label"] == "helper"
-    # method label overrides its default short-name.
+    # nested label override.
     assert _node(graph, "Runner.go_fast")["label"] == "go"
 
 
-def test_method_label_defaults_to_short_name():
-    graph = parse(
-        {"nodes": {"classes": {"Runner": {"methods": {"go": {}}}}}}
-    )
+def test_label_defaults_to_short_name():
+    graph = parse({"nodes": {"$Runner": {"type": "class", "$go": {}}}})
     assert _node(graph, "Runner.go")["label"] == "go"
 
 
-def test_group_is_compound_parent_of_its_members():
+def test_any_node_with_children_is_a_compound_parent():
     with warnings.catch_warnings():
         warnings.simplefilter("error")
         graph = parse(
             {
                 "nodes": {
-                    "groups": {
-                        "step1": {
-                            "loc": "s.py",
-                            "functions": {"a": {"calls": {"b": ""}}, "b": {}},
-                        }
+                    "$step1": {
+                        "type": "group",
+                        "loc": "s.py",
+                        "$a": {"calls": {"$step1.b": ""}},
+                        "$b": {},
                     }
                 }
             }
@@ -347,74 +368,69 @@ def test_group_is_compound_parent_of_its_members():
     grp = _node(graph, "step1")
     assert grp["type"] == "group"
     assert grp["parent"] is None
-    assert grp["data"].get("loc") == "s.py"  # non-member keys become group data
-    # members are parented to the group; their ids stay bare (unqualified).
-    assert _node(graph, "a")["parent"] == "step1"
-    assert _node(graph, "b")["parent"] == "step1"
-    # edges between members still resolve.
-    assert ("a", "b") in _edge_set(graph)
+    assert grp["data"].get("loc") == "s.py"  # unmarked keys become node data
+    # members are parented to the group; ids are path-qualified.
+    assert _node(graph, "step1.a")["parent"] == "step1"
+    assert _node(graph, "step1.b")["parent"] == "step1"
+    # edges between members resolve via full paths.
+    assert ("step1.a", "step1.b") in _edge_set(graph)
 
 
-def test_groups_nest_recursively_with_classes_and_functions():
+def test_nesting_is_recursive_and_ids_are_paths():
     with warnings.catch_warnings():
         warnings.simplefilter("error")
         graph = parse(
             {
                 "nodes": {
-                    "groups": {
-                        "outer": {
-                            "functions": {"top": {}},
-                            "groups": {
-                                "inner": {
-                                    "functions": {"deep": {}},
-                                    "classes": {"C": {"methods": {"m": {}}}},
-                                }
-                            },
-                        }
+                    "$outer": {
+                        "type": "group",
+                        "$top": {},
+                        "$inner": {
+                            "type": "group",
+                            "$deep": {},
+                            "$C": {"type": "class", "$m": {}},
+                        },
                     }
                 }
             }
         )
     assert _node(graph, "outer")["parent"] is None
-    assert _node(graph, "top")["parent"] == "outer"
-    assert _node(graph, "inner")["parent"] == "outer"
-    assert _node(graph, "deep")["parent"] == "inner"
-    assert _node(graph, "C")["parent"] == "inner"
-    assert _node(graph, "C.m")["parent"] == "C"
+    assert _node(graph, "outer.top")["parent"] == "outer"
+    assert _node(graph, "outer.inner")["parent"] == "outer"
+    assert _node(graph, "outer.inner.deep")["parent"] == "outer.inner"
+    assert _node(graph, "outer.inner.C")["parent"] == "outer.inner"
+    assert _node(graph, "outer.inner.C.m")["parent"] == "outer.inner.C"
 
 
-def test_group_can_act_as_a_function():
+def test_compound_can_act_as_a_function():
     with warnings.catch_warnings():
         warnings.simplefilter("error")
         graph = parse(
             {
                 "nodes": {
-                    "input": {"cfg": {"type": "file"}},
-                    "groups": {
-                        "workflow": {
-                            "args": {"c": "cfg"},
-                            "calls": {"other": "run"},
-                            "functions": {"inner": {}},
-                        }
+                    "$cfg": {"type": "file"},
+                    "$workflow": {
+                        "type": "group",
+                        "args": {"c": "$cfg"},
+                        "calls": {"$other": "run"},
+                        "$inner": {},
                     },
-                    "functions": {"other": {}},
+                    "$other": {},
                 }
             }
         )
-    # group participates in edges like a function.
+    # a compound participates in edges like any node.
     assert ("cfg", "workflow", "args") in _labeled_edges_typed(graph)
     assert ("workflow", "other", "calls") in _labeled_edges_typed(graph)
 
 
-def test_numeric_and_bool_arg_values_are_not_references():
+def test_numeric_and_bool_values_are_literals():
     with warnings.catch_warnings():
         warnings.simplefilter("error")
         graph = parse(
             {
                 "nodes": {
-                    "functions": {
-                        "f": {"args": {"threshold": 60, "flag": False}},
-                    }
+                    "$f": {"args": {"threshold": 60, "flag": False}},
                 }
             }
         )
@@ -426,9 +442,9 @@ def test_duplicate_edges_are_deduped_but_types_kept():
         warnings.simplefilter("error")
         graph = parse(
             {
-                "nodes": {"functions": {"a": {"calls": {"b": ""}}, "b": {}}},
+                "nodes": {"$a": {"calls": {"$b": ""}}, "$b": {}},
                 # Explicit edge repeating the derived calls edge exactly.
-                "edges": [{"from": "a", "to": "b", "type": "calls"}],
+                "edges": [{"from": "$a", "to": "$b", "type": "calls"}],
             }
         )
     calls_edges = [e for e in graph["edges"] if e.get("type") == "calls"]
@@ -438,7 +454,7 @@ def test_duplicate_edges_are_deduped_but_types_kept():
 def test_diagram_config_passes_through():
     graph = parse(
         {
-            "nodes": {"functions": {"a": {}}},
+            "nodes": {"$a": {}},
             "diagram": {"direction": "DOWN", "spacing": 60, "elk": {"elk.aspectRatio": "2"}},
         }
     )
@@ -453,19 +469,18 @@ def test_relations_registers_new_edge_kinds():
             {
                 "relations": {
                     "emits": {"direction": "out"},
-                    "reads": {"direction": "in", "ref": "value"},
+                    "reads": {"direction": "in"},
                 },
                 "nodes": {
-                    "input": {"log": {"type": "file"}, "cfg": {"type": "file"}},
-                    "functions": {
-                        "a": {"emits": {"log": "event"}, "reads": {"conf": "cfg"}},
-                    },
+                    "$log": {"type": "file"},
+                    "$cfg": {"type": "file"},
+                    "$a": {"emits": {"$log": "event"}, "reads": {"conf": "$cfg"}},
                 },
             }
         )
     assert ("a", "log", "emits") in _labeled_edges_typed(graph)
     assert ("cfg", "a", "reads") in _labeled_edges_typed(graph)
-    # label carried from the key-ref form.
+    # label carried from the key-side-ref form.
     assert ("a", "log", "event") in _labeled_edges(graph)
 
 
@@ -475,8 +490,8 @@ def test_relations_unresolved_ref_still_warns():
             {
                 "relations": {"emits": {"direction": "out"}},
                 "nodes": {
-                    "input": {"log": {"type": "file"}},
-                    "functions": {"a": {"emits": {"lgo": ""}}},
+                    "$log": {"type": "file"},
+                    "$a": {"emits": {"$lgo": ""}},
                 },
             }
         )
@@ -485,3 +500,53 @@ def test_relations_unresolved_ref_still_warns():
 def test_relations_bad_direction_is_error():
     with pytest.raises(ValueError, match="direction"):
         parse({"relations": {"x": {"direction": "sideways"}}, "nodes": {}})
+
+
+def test_relations_ref_axis_is_obsolete():
+    """The old ref: key|value axis is gone -- references self-mark with $."""
+    with pytest.raises(ValueError, match="ref"):
+        parse({"relations": {"reads": {"direction": "in", "ref": "value"}}, "nodes": {}})
+
+
+def test_default_type_falls_back_to_node():
+    graph = parse({"nodes": {"$plain": {}}})
+    assert _node(graph, "plain")["type"] == "node"
+
+
+def test_defaults_block_types_children_by_parent_type():
+    graph = parse(
+        {
+            "defaults": {"class": "method", "group": "function", "_root": "input"},
+            "nodes": {
+                "$untyped_root": {},
+                "$C": {"type": "class", "$m": {}},
+                "$g": {"type": "group", "$f": {}},
+            },
+        }
+    )
+    assert _node(graph, "untyped_root")["type"] == "input"
+    assert _node(graph, "C.m")["type"] == "method"
+    assert _node(graph, "g.f")["type"] == "function"
+
+
+def test_defaults_chain_through_defaulted_parents():
+    """A child's default keys off the parent's *resolved* type."""
+    graph = parse(
+        {
+            "defaults": {"_root": "group", "group": "group"},
+            "nodes": {"$outer": {"$inner": {"$leaf": {}}}},
+        }
+    )
+    assert _node(graph, "outer")["type"] == "group"
+    assert _node(graph, "outer.inner")["type"] == "group"
+    assert _node(graph, "outer.inner.leaf")["type"] == "group"
+
+
+def test_explicit_type_beats_defaults():
+    graph = parse(
+        {
+            "defaults": {"group": "function"},
+            "nodes": {"$g": {"type": "group", "$c": {"type": "class"}}},
+        }
+    )
+    assert _node(graph, "g.c")["type"] == "class"

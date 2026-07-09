@@ -6,20 +6,18 @@ from io_flow.cli import main
 
 CLEAN = """\
 nodes:
-  input:
-    cfg: {type: file}
-  functions:
-    run:
-      args: {c: cfg}
+  $cfg: {type: file}
+  $run:
+    type: function
+    args: {c: $cfg}
 """
 
 BROKEN_REF = """\
 nodes:
-  input:
-    cfg: {type: file}
-  functions:
-    run:
-      args: {c: cgf}
+  $cfg: {type: file}
+  $run:
+    type: function
+    args: {c: $cgf}
 """
 
 

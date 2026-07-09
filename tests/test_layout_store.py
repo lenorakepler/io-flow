@@ -87,11 +87,7 @@ def test_annotate_elk_with_notice_when_topology_changes(yaml_copy):
 
     # Add a new input node to change topology, keeping the saved layout block.
     text = yaml_copy.read_text(encoding="utf-8")
-    text = text.replace(
-        "  functions:",
-        "    newnode:\n      type: file\n\n  functions:",
-        1,
-    )
+    text = text.replace("nodes:\n", "nodes:\n  $newnode: {type: file}\n", 1)
     yaml_copy.write_text(text, encoding="utf-8")
 
     changed = parse_file(yaml_copy)

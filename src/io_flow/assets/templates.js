@@ -9,8 +9,10 @@
  *
  * Contract:
  *  - Return an HTML string. Use `esc()` on any value that came from YAML.
- *  - A compound node (one that contains children, e.g. `class`) MUST include an
- *    element with class `node__children`; the engine mounts child nodes there.
+ *  - Any node may contain children (compound-ness is a state, not a type).
+ *    Include an element with class `node__children` to control where the
+ *    engine mounts them; if the template omits it and the node has children,
+ *    the engine appends a default mount at the end.
  */
 window.IOFlow = window.IOFlow || {};
 (function (IOF) {
@@ -58,6 +60,9 @@ window.IOFlow = window.IOFlow || {};
       ${n.data.value !== undefined ? `<div class="node__meta">= ${esc(n.data.value)}</div>` : ""}
     `,
     input: (n) => `<div class="node__title">${name(n)}</div>`,
+    // Default type for nodes declared without `type:` (and the fallback for
+    // types with no template entry).
+    node: (n) => `<div class="node__title">${name(n)}</div>`,
     function: (n) => `
       <div class="node__title">${name(n)}()</div>
       ${meta(n.data.loc)}
@@ -66,7 +71,10 @@ window.IOFlow = window.IOFlow || {};
       <div class="node__title">${name(n)}()</div>
     `,
     attributes: (n) => {
-      const keys = Object.keys(n.data || {});
+      // Attribute wiring lives in the node's args: map; fall back to plain
+      // data keys (minus the reserved ones) for attribute-bags without edges.
+      const src = n.data.args || n.data;
+      const keys = Object.keys(src || {}).filter((k) => k !== "type" && k !== "label");
       return `
         <div class="node__title">attributes</div>
         ${keys.length ? `<div class="node__meta">${keys.map(esc).join(", ")}</div>` : ""}
@@ -90,7 +98,7 @@ window.IOFlow = window.IOFlow || {};
   };
 
   IOF.templates = templates;
-  IOF.renderNode = (node) => (templates[node.type] || templates.input)(node);
+  IOF.renderNode = (node) => (templates[node.type] || templates.node)(node);
 
   /* ---- Sidebar templates — USER-EDITABLE ----------------------------------
    *
@@ -119,7 +127,7 @@ window.IOFlow = window.IOFlow || {};
   };
 
   const sidebars = {
-    attributes: (n) => `<dl>${row("attributes", fmtMap(n.data))}</dl>`,
+    attributes: (n) => `<dl>${row("attributes", fmtMap(n.data.args || n.data))}</dl>`,
   };
 
   IOF.sidebars = sidebars;

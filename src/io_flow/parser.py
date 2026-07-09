@@ -1,33 +1,61 @@
 """YAML -> normalized recursive graph model.
 
-The model is a flat list of nodes (each carrying a ``parent`` pointer so the
-structure is recursive from day one) plus a flat list of edges::
+Grammar: **$name means node, everywhere.** A key starting with ``$`` declares a
+node; a ``$``-marked key or string value inside a relation block references
+one. Everything else in a node's mapping is a free-form property shown in the
+sidebar (and available to templates). One rule covers declaration, nesting,
+and reference::
+
+    defaults:
+      class: method            # untyped children of a class are methods
+    nodes:
+      $configfile: {type: file, cli: --config}
+      $Config:
+        type: class
+        loc: src/config.py     # <- not reserved, not $-marked: free data
+        $from_yaml:            # <- child node; id "Config.from_yaml"
+          args: {path: $configfile}
+
+The output model is a flat list of nodes (each carrying a ``parent`` pointer so
+the structure is recursive) plus a flat list of edges::
 
     {
       "nodes": [{"id", "type", "parent", "label", "data"}, ...],
       "edges": [{"source", "target", "type"?, "label"?}, ...],
     }
 
-Edge derivation is deliberately conservative (see PLAN.md §3.1):
+Rules:
 
-* **Two-pass.** Every node id is collected first, then references are resolved,
-  so forward references work regardless of document order.
-* References are only looked for in a **registry** of positions (``EDGE_KEYS``
-  below, plus class ``attributes:`` values). ``value:``, ``cli:`` and
-  ``description:`` are never scanned, so their free text can never spawn a
-  phantom edge.
-* Matches are **exact** against the set of collected node ids.
-* **Duplicate ids are a hard error** (``DuplicateNodeError``).
-* Unresolved references emit a loud ``UnresolvedReferenceWarning`` that lists
+* **Ids are paths.** A node's id is its ``$``-stripped names dot-joined from
+  the root (``$postprocess`` > ``$plot`` -> ``postprocess.plot``). References
+  use the full path (``$postprocess.plot``). Names therefore cannot contain
+  ``.``. Labels default to the short (last-segment) name.
+* **Types are free-form.** ``type:`` maps straight to a viewer template +
+  ``.node--<type>`` CSS class; no registration anywhere. Untyped nodes get a
+  type from the ``defaults:`` block (parent type -> child type, ``_root`` for
+  top-level nodes), falling back to ``"node"``.
+* **References are self-marking.** Inside a relation block, whichever side of
+  an entry wears the ``$`` is the reference; the parser never guesses from
+  position. Unmarked strings are always literals -- free text can never spawn
+  a phantom edge. An unmarked string that *exactly matches* a node id draws an
+  ``UnmarkedReferenceWarning`` (a forgotten ``$`` silently drops an edge
+  otherwise). Both sides ``$``-marked is an error.
+* **Two-pass.** Every node id is collected first, then references are
+  resolved, so forward references work regardless of document order.
+* Unresolved ``$refs`` emit a loud ``UnresolvedReferenceWarning`` listing
   close candidates -- a plausible-but-wrong diagram is worse than a noisy one.
 
-Extending the vocabulary:
+Extending the vocabulary (none of it touches this module):
 
-* New **edge semantics** ("reads", "emits", ...) are one entry in ``EDGE_KEYS``.
-* New **nestable containers** are one entry in ``MEMBER_KEYS`` (plus a template
-  + CSS rule on the viewer side).
-* New **input node types** need no parser change at all -- ``type:`` on an
-  input entry is free-form and maps straight to a template/CSS class.
+* New **node types** are free-form ``type:`` values (+ optional template/CSS).
+* New **containers** are just nodes with ``$``-children; compound-ness is a
+  state, not a type.
+* New **edge semantics** are one entry in the document's ``relations:`` block
+  (or, for built-ins, ``EDGE_KEYS`` below). Because references self-mark,
+  a relation declares only its ``direction``.
+
+The ``children:``-fence grammar this replaced is documented in
+GRAMMAR_ALTERNATIVES.md, including a revert recipe.
 """
 
 from __future__ import annotations
@@ -39,61 +67,69 @@ from typing import Any
 
 from ruamel.yaml import YAML
 
+SIGIL = "$"
+DEFAULT_TYPE = "node"
+
 
 class DuplicateNodeError(ValueError):
-    """Raised when two nodes would share the same (possibly qualified) id."""
+    """Raised when two nodes would share the same path id."""
 
 
 class UnresolvedReferenceWarning(UserWarning):
-    """A value in a reference position did not match any known node id."""
+    """A ``$``-marked reference did not match any known node id."""
 
 
-# Reference-position registry: spec key -> (direction, ref_position).
+class UnmarkedReferenceWarning(UserWarning):
+    """An unmarked literal in a relation block exactly matches a node id."""
+
+
+# Built-in relation kinds: name -> direction.
 #
-# direction  "in":  data flows from the referenced node INTO the owner
-#                   (edge source = referenced id, target = owner).
-#            "out": the owner points AT the referenced node
-#                   (edge source = owner, target = referenced id).
-# ref_pos    "value": the entry's *values* are the references (keys are arg
-#                     names; non-string values are literal defaults, skipped
-#                     silently).
-#            "key":   the entry's *keys* are the references (values are
-#                     optional edge-label text; "" means no label).
+# "in":  data flows from the referenced node INTO the owner
+#        (edge source = referenced id, target = owner).
+# "out": the owner points AT the referenced node
+#        (edge source = owner, target = referenced id).
 #
-# The spec key doubles as the edge's ``type`` tag, which the viewer exposes as
-# an ``edge--<type>`` CSS class.
-EDGE_KEYS: dict[str, tuple[str, str]] = {
-    "args": ("in", "value"),
-    "calls": ("out", "key"),
-    "returns": ("out", "key"),
+# Because references are $-marked, a relation needs no "key or value?" axis:
+# whichever side of an entry wears the $ is the reference; the unmarked side
+# is a literal (arg name, label text, or default value).
+#
+# The relation name doubles as the edge's ``type`` tag, which the viewer
+# exposes as an ``edge--<type>`` CSS class.
+EDGE_KEYS: dict[str, str] = {
+    "args": "in",
+    "calls": "out",
+    "returns": "out",
 }
 
 
-def _edge_keys_for(data: dict[str, Any]) -> dict[str, tuple[str, str]]:
+def _edge_keys_for(data: dict[str, Any]) -> dict[str, str]:
     """Built-in EDGE_KEYS plus any registered in the document's ``relations:``.
 
     A diagram can declare new relationship kinds without touching this module::
 
         relations:
-          emits:  {direction: out}            # ref: key is the default
-          reads:  {direction: in, ref: value}
+          emits:  {direction: out}
+          reads:  {direction: in}
 
-    Each registered name becomes usable on any function/method/group exactly
-    like ``calls:``, tags its edges with ``type: <name>`` (so ``edge--<name>``
-    is stylable from CSS), and follows the same resolve/warn rules.
+    Each registered name becomes usable on any node exactly like ``calls:``,
+    tags its edges with ``type: <name>`` (so ``edge--<name>`` is stylable from
+    CSS), and follows the same resolve/warn rules.
     """
     keys = dict(EDGE_KEYS)
     for name, spec in (data.get("relations", {}) or {}).items():
         spec = spec or {}
+        if "ref" in spec:
+            raise ValueError(
+                f"relations.{name}: 'ref' is obsolete -- references are "
+                f"$-marked, so either side of an entry may hold the reference"
+            )
         direction = str(spec.get("direction", "out"))
-        ref = str(spec.get("ref", "key"))
         if direction not in ("in", "out"):
             raise ValueError(
                 f"relations.{name}: direction must be 'in' or 'out', got {direction!r}"
             )
-        if ref not in ("key", "value"):
-            raise ValueError(f"relations.{name}: ref must be 'key' or 'value', got {ref!r}")
-        keys[str(name)] = (direction, ref)
+        keys[str(name)] = direction
     return keys
 
 
@@ -110,109 +146,101 @@ def parse_file(path: str | Path) -> dict[str, Any]:
     return graph
 
 
+def _strip(ref: str) -> str:
+    return ref[len(SIGIL) :]
+
+
 def parse(data: dict[str, Any]) -> dict[str, Any]:
     """Parse an already-loaded YAML mapping into the graph model."""
     nodes: list[dict[str, Any]] = []
     seen: set[str] = set()
 
-    # Reference sites recorded during the first pass and resolved in the
-    # second. Each entry: (owner_node_id, edge_type, ref, label, context_key)
-    # where `context_key` only serves the warning message for "value" refs.
-    sites: list[tuple[str, str, Any, Any, str | None]] = []
+    edge_keys = _edge_keys_for(data)
 
-    def add_node(
-        node_id: str,
-        node_type: str,
-        parent: str | None,
-        node_data: Any,
-        label: str | None = None,
-    ) -> None:
-        if node_id in seen:
-            raise DuplicateNodeError(
-                f"duplicate node id {node_id!r}: node ids (including qualified "
-                f"class members like 'Config.from_yaml') must be unique"
+    defaults = data.get("defaults", {}) or {}
+    if not isinstance(defaults, dict):
+        raise ValueError(f"defaults: must be a mapping of parent type -> child type")
+
+    def default_type(parent_type: str | None) -> str:
+        key = parent_type if parent_type is not None else "_root"
+        return str(defaults.get(key, DEFAULT_TYPE))
+
+    # Reference sites recorded during the walk and resolved in pass 2.
+    # Each entry: (owner_node_id, edge_type, ref, label, context_key)
+    # where `context_key` only serves warning messages for value-side refs.
+    sites: list[tuple[str, str, str, Any, str | None]] = []
+    # Unmarked strings in relation blocks, checked in pass 2 against node ids
+    # (a forgotten $ silently drops an edge; make that loud).
+    literals: list[tuple[str, str, str]] = []  # (owner, edge_type, text)
+
+    def record_edges(node_id: str, spec: dict[str, Any]) -> None:
+        """Queue every relation-block entry on ``spec`` for pass 2."""
+        for edge_type in edge_keys:
+            for key, value in (spec.get(edge_type, {}) or {}).items():
+                key = str(key)
+                key_ref = key.startswith(SIGIL)
+                value_ref = isinstance(value, str) and value.startswith(SIGIL)
+                if key_ref and value_ref:
+                    raise ValueError(
+                        f"{edge_type} entry {key}: {value} on {SIGIL}{node_id}: both "
+                        f"sides are $-marked; exactly one side may be the reference"
+                    )
+                if key_ref:
+                    # Unmarked value is optional edge-label text ("" = none).
+                    sites.append((node_id, edge_type, _strip(key), value, None))
+                elif value_ref:
+                    # Unmarked key is a name for the connection (arg name).
+                    sites.append((node_id, edge_type, _strip(value), None, key))
+                else:
+                    # Pure literal entry (e.g. a default value); no edge. Pass 2
+                    # warns if either side exactly matches a node id.
+                    literals.append((node_id, edge_type, key))
+                    if isinstance(value, str):
+                        literals.append((node_id, edge_type, value))
+
+    def add_node(name: str, spec: Any, parent_id: str | None, parent_type: str | None) -> None:
+        if not name or "." in name:
+            raise ValueError(
+                f"invalid node name {SIGIL}{name!r}"
+                + (" under " + parent_id if parent_id else "")
+                + ": names must be non-empty and cannot contain '.' "
+                "(dots separate path segments in ids)"
             )
+        spec = spec or {}
+        if not isinstance(spec, dict):
+            raise ValueError(f"node {SIGIL}{name}: spec must be a mapping, got {spec!r}")
+        node_id = f"{parent_id}.{name}" if parent_id else name
+        if node_id in seen:
+            raise DuplicateNodeError(f"duplicate node id {node_id!r}")
         seen.add(node_id)
-        # `id` stays the unique, addressable key; `label` is the display name and
-        # defaults to it (methods show only their short, unqualified name).
-        if label is None:
-            label = node_id.split(".")[-1] if node_type == "method" else node_id
+
+        node_type = str(spec["type"]) if spec.get("type") is not None else default_type(parent_type)
+        label = spec.get("label")
+        children = {k: v for k, v in spec.items() if str(k).startswith(SIGIL)}
+        node_data = {str(k): v for k, v in spec.items() if not str(k).startswith(SIGIL)}
         nodes.append(
             {
                 "id": node_id,
                 "type": node_type,
-                "parent": parent,
-                "label": label,
-                "data": _plain(node_data) if node_data is not None else {},
+                "parent": parent_id,
+                # label defaults to the short name; the path id stays the
+                # unique, addressable key.
+                "label": label if label is not None else name,
+                "data": _plain(node_data),
             }
         )
+        record_edges(node_id, spec)
+        for child_key, child_spec in children.items():
+            add_node(_strip(str(child_key)), child_spec, node_id, node_type)
 
-    top = data.get("nodes", {}) or {}
-    edge_keys = _edge_keys_for(data)
-
-    def record_edges(node_id: str, spec: dict[str, Any]) -> None:
-        """Queue every edge-key position on ``spec`` for resolution in pass 2."""
-        for edge_type, (_direction, ref_pos) in edge_keys.items():
-            for key, value in (spec.get(edge_type, {}) or {}).items():
-                if ref_pos == "value":
-                    sites.append((node_id, edge_type, value, None, str(key)))
-                else:
-                    sites.append((node_id, edge_type, str(key), value, None))
-
-    def add_function(fname: str, fspec: Any, parent: str | None) -> None:
-        fspec = fspec or {}
-        add_node(fname, "function", parent, fspec, label=fspec.get("label"))
-        record_edges(fname, fspec)
-
-    def add_class(cname: str, cspec: Any, parent: str | None) -> None:
-        cspec = cspec or {}
-        class_data = {k: v for k, v in cspec.items() if k not in ("attributes", "methods")}
-        add_node(cname, "class", parent, class_data, label=cspec.get("label"))
-
-        attributes = cspec.get("attributes")
-        if attributes is not None:
-            attr_id = f"{cname}.attributes"
-            add_node(attr_id, "attributes", cname, attributes)
-            # Attribute values are "in" references, same semantics as args.
-            for key, value in (attributes or {}).items():
-                sites.append((attr_id, "args", value, None, str(key)))
-
-        for mname, mspec in (cspec.get("methods", {}) or {}).items():
-            mspec = mspec or {}
-            mid = f"{cname}.{mname}"
-            add_node(mid, "method", cname, mspec, label=mspec.get("label"))
-            record_edges(mid, mspec)
-
-    def add_group(gname: str, gspec: Any, parent: str | None) -> None:
-        gspec = gspec or {}
-        group_data = {k: v for k, v in gspec.items() if k not in MEMBER_KEYS}
-        add_node(gname, "group", parent, group_data, label=gspec.get("label"))
-        # A group may itself participate in edges ("sometimes a function itself").
-        record_edges(gname, gspec)
-        add_members(gspec, gname)
-
-    # Nestable-member registry: section key under a container -> adder. Adding
-    # a new container/member kind is one entry here (+ template & CSS).
-    MEMBER_KEYS: dict[str, Any] = {
-        "classes": add_class,
-        "functions": add_function,
-        "groups": add_group,
-    }
-
-    def add_members(container: dict[str, Any], parent: str | None) -> None:
-        """Add the members nested directly under ``container``."""
-        for section, adder in MEMBER_KEYS.items():
-            for name, spec in (container.get(section, {}) or {}).items():
-                adder(name, spec, parent)
-
-    # --- Pass 1a: input nodes (files / options / parameters / ...) ------------
-    for name, spec in (top.get("input", {}) or {}).items():
-        spec = spec or {}
-        node_type = spec.get("type", "input")
-        add_node(name, node_type, None, spec, label=spec.get("label"))
-
-    # --- Pass 1b: classes / functions / groups (recursive compounds) ----------
-    add_members(top, None)
+    for key, spec in (data.get("nodes", {}) or {}).items():
+        key = str(key)
+        if not key.startswith(SIGIL):
+            raise ValueError(
+                f"nodes.{key}: top-level entries under nodes: must be node "
+                f"declarations ({SIGIL}{key}); there is no node to attach data to"
+            )
+        add_node(_strip(key), spec, None, None)
 
     # --- Pass 2: resolve reference sites into edges ---------------------------
     node_ids = set(seen)
@@ -220,48 +248,62 @@ def parse(data: dict[str, Any]) -> dict[str, Any]:
 
     def _warn_unresolved(ref: str, detail: str) -> None:
         candidates = difflib.get_close_matches(ref, node_ids, n=5, cutoff=0.4)
-        hint = f" Did you mean: {', '.join(candidates)}?" if candidates else ""
+        hint = f" Did you mean: {', '.join(SIGIL + c for c in candidates)}?" if candidates else ""
         warnings.warn(
-            f"unresolved reference {ref!r} {detail} (no node with that id).{hint}",
+            f"unresolved reference {SIGIL}{ref} {detail} (no node with that id).{hint}",
             UnresolvedReferenceWarning,
             stacklevel=3,
         )
 
     for owner, edge_type, ref, label, context_key in sites:
-        direction, ref_pos = edge_keys[edge_type]
-        # Only strings can name a node. Non-strings (numbers, bools) in a
-        # value-ref position are literal defaults, not references -- skip
-        # silently.
-        if not isinstance(ref, str):
-            continue
         if ref not in node_ids:
             where = f"for {owner}.{context_key}" if context_key else f"({edge_type}) from {owner}"
             _warn_unresolved(ref, where)
             continue
+        direction = edge_keys[edge_type]
         source, target = (ref, owner) if direction == "in" else (owner, ref)
         edge: dict[str, str] = {"source": source, "target": target, "type": edge_type}
         if isinstance(label, str) and label:
             edge["label"] = label
         edges.append(edge)
 
+    for owner, edge_type, text in literals:
+        if text in node_ids:
+            warnings.warn(
+                f"literal {text!r} in {edge_type} of {owner} exactly matches node "
+                f"{SIGIL}{text} but is unmarked, so no edge was made. Write "
+                f"{SIGIL}{text} if you meant a reference (ignore this if it is "
+                f"just a name or literal value).",
+                UnmarkedReferenceWarning,
+                stacklevel=2,
+            )
+
     # --- Pass 2b: explicit top-level edges ------------------------------------
-    # A direct alternative to deriving edges from EDGE_KEYS positions:
+    # A direct alternative to deriving edges from relation blocks:
     #   edges:
-    #     - {from: a, to: b, type: calls, label: "..."}
-    # `from`/`to` are node ids (direction as written); `type` is a free tag
-    # (conventionally an EDGE_KEYS name); `label` is optional.
+    #     - {from: $a, to: $b, type: calls, label: "..."}
+    # `from`/`to` are $-marked node refs (direction as written); `type` is a
+    # free tag (conventionally a relation name); `label` is optional.
     for spec in data.get("edges") or []:
         spec = _plain(spec) or {}
         source = spec.get("from")
         dest = spec.get("to")
         if not source or not dest:
             raise ValueError(
-                f"explicit edge {spec!r} must have both 'from' and 'to' node ids"
+                f"explicit edge {spec!r} must have both 'from' and 'to' node references"
             )
+        source, dest = str(source), str(dest)
+        unmarked = [r for r in (source, dest) if not r.startswith(SIGIL)]
+        if unmarked:
+            raise ValueError(
+                f"explicit edge {source} -> {dest}: from/to are node references "
+                f"and must be $-marked ({', '.join(SIGIL + u for u in unmarked)})"
+            )
+        source, dest = _strip(source), _strip(dest)
         missing = [nid for nid in (source, dest) if nid not in node_ids]
         if missing:
             for nid in missing:
-                _warn_unresolved(nid, f"in {source} -> {dest}")
+                _warn_unresolved(nid, f"in {SIGIL}{source} -> {SIGIL}{dest}")
             continue
         edge = {"source": source, "target": dest}
         if spec.get("type") is not None:

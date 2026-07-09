@@ -14,13 +14,12 @@ from io_flow.server import LayoutServer
 YAML = """\
 # top comment that must survive
 nodes:
-  input:
-    cfg:
-      type: file   # inline comment
-  functions:
-    run:
-      args:
-        c: cfg
+  $cfg:
+    type: file   # inline comment
+  $run:
+    type: function
+    args:
+      c: $cfg
 """
 
 
@@ -51,7 +50,7 @@ def test_get_serves_built_html(served):
 
 def test_get_rebuilds_after_yaml_edit(served):
     src, srv = served
-    src.write_text(YAML + "    newfn: {}\n", encoding="utf-8")
+    src.write_text(YAML + "  $newfn: {}\n", encoding="utf-8")
     _status, body = _get(srv)
     assert "newfn" in body
 
@@ -93,7 +92,7 @@ def test_version_changes_when_yaml_touched(served):
     src, srv = served
     _status, body = _get(srv, "/version")
     v1 = json.loads(body)["v"]
-    src.write_text(YAML + "    another: {}\n", encoding="utf-8")
+    src.write_text(YAML + "  $another: {}\n", encoding="utf-8")
     _status, body = _get(srv, "/version")
     v2 = json.loads(body)["v"]
     assert v2 > v1

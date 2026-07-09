@@ -29,13 +29,23 @@ window.IOFlow = window.IOFlow || {};
     });
 
     // 1. Build node elements (create all, then attach to parent/canvas).
+    // Compound-ness is a state, not a type: any node may have children, so if
+    // a parent's template provides no `.node__children` mount, create one.
+    const parentIds = new Set(
+      graph.nodes.map((n) => n.parent).filter((p) => p != null)
+    );
     graph.nodes.forEach((n) => {
       const el = document.createElement("div");
       el.className = "node node--" + n.type;
       el.setAttribute("data-node-id", n.id);
       el.innerHTML = IOF.renderNode(n);
       state.nodeEls[n.id] = el;
-      const mount = el.querySelector(".node__children");
+      let mount = el.querySelector(".node__children");
+      if (!mount && parentIds.has(n.id)) {
+        mount = document.createElement("div");
+        mount.className = "node__children";
+        el.appendChild(mount);
+      }
       if (mount) state.childMount[n.id] = mount;
     });
     graph.nodes.forEach((n) => {
