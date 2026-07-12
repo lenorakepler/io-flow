@@ -174,6 +174,25 @@ Per-project skins without editing the installed package:
 io-flow build pipeline.yaml --css my_skin.css --templates my_templates.js
 ```
 
+**How much CSS controls.** Node *size* is genuinely CSS-owned: before layout,
+the engine measures each rendered node from the DOM (after fonts settle), so
+padding, font, and `max-width` changes flow straight into ELK and into
+restored layouts — a chunkier node type really gets more room. Node
+*position* and *spacing* are not CSS: positions are frozen into inline pixels
+(the coordinate space that edges, drag, and Save all trust), and gaps between
+nodes are an ELK input, tuned from the YAML `diagram:` block. If you restyle
+nodes much bigger under an already-pinned layout, sizes update on reload but
+positions don't — re-arrange (or delete the `layout:` block for a fresh ELK
+draft) if things crowd.
+
+**`--header-h`: the one CSS value the engine reads.** The compound-header
+height is geometry that styling genuinely needs to change, so the engine
+reads it from the CSS variable (`IOF.headerH()`) instead of hard-coding it.
+It drives the ELK top-padding inside compounds, the drag/keyboard clamp that
+keeps children below the header, and the collapsed height. Restyle the header
+taller or shorter in one place — `:root { --header-h: ... }` — and layout,
+dragging, and collapse all follow; no engine edit, no stale offsets.
+
 Everything else lives behind a hard module boundary in
 `src/io_flow/assets/engine/` (layout, edges, dim, drag, pan, save, live,
 collapse, ui) and rarely needs editing.
