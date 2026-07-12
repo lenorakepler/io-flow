@@ -60,6 +60,11 @@ Positions are never silently mixed.
 - **INCLUDE_CHILDREN just works** for the cross-hierarchy edge — this was the #1
   de-risk in the plan and needed no option fiddling. Validate it first on any
   new nesting level (e.g. workflow/step grouping) before trusting it.
+  The flip side: it ignores per-compound `elk.algorithm`/`elk.direction`, which
+  killed per-subgraph layout *config*. The sanctioned bypass is
+  `diagram: classLayout:` (layout.js `planStacks`): stack class interiors
+  outside ELK and present each class to ELK as a fixed-size leaf, remapping
+  member edge endpoints in the elk graph (elkjs throws on unknown ids).
 - **Measure after `fonts.ready`**, and round leaf sizes up. Fractional widths
   caused occasional single-line labels to wrap.
 - **Don't measure compounds** — let ELK size them; otherwise you fight the DOM's

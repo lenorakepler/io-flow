@@ -167,6 +167,31 @@ warning. `examples/csv_to_sankey.py` generates all of this — populations,
 weights, strata colors, bar styling — from a CSV of items progressing
 through boolean stages.
 
+**Class layout mode.** ELK ignores per-compound layout options under the
+hierarchy handling this project depends on (see `ELK_LAYOUT_NOTES.md`), so
+per-subgraph layout is a mode instead: declare `diagram: classLayout:` and
+every `class` compound renders as a UML-style stacked member list — members
+in declaration order, uniform width — while ELK still arranges everything
+outside the classes (each stacked class faces ELK as a fixed-size box, and
+edges into members keep working):
+
+```yaml
+diagram:
+  classLayout:              # bare = {types: [class]}; {types: [class, group]} widens
+```
+
+The engine owns the stack geometry only; row appearance is CSS via the
+`.node--stacked` class it adds (defaults in `viewer.css`, edit freely). A
+stacked class may contain leaves and nested stacked classes; any other
+compound inside makes that class fall back to normal ELK layout with a
+console warning. Drag, resize, collapse, and Save work as usual — members
+drag like any node, and a dragged-out member saves and restores where you
+left it. Saved layouts win as always: toggling the mode on in a file that
+already has a `layout:` block restores the saved positions (only row widths
+normalize); delete the block to get freshly stacked classes. Non-goal:
+`sankey:` and `classLayout:` together is untested. See
+[`examples/class_layout.yaml`](examples/class_layout.yaml).
+
 **Registering new relationship kinds.** `relations:` extends that table per
 diagram, no code required. Because references self-mark, a relation declares
 only its direction:

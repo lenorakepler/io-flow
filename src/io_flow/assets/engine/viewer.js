@@ -85,6 +85,12 @@ window.IOFlow = window.IOFlow || {};
       }
     }
 
+    // Class-layout mode (diagram: classLayout:): stack class members as
+    // uniform-width rows (layout.js planStacks). Runs before layout in both
+    // paths -- the inline sizes it sets are read back by measurement,
+    // exactly like the sankey heights above. Null when the mode is off.
+    const stacks = IOF.layout.planStacks ? IOF.layout.planStacks(graph, state.nodeEls) : null;
+
     // 3. Layout (restore saved positions or run ELK), then apply.
     const info = graph._layout || { mode: "elk", positions: {}, notice: null };
     if (info.notice) showNotice(info.notice);
@@ -92,7 +98,7 @@ window.IOFlow = window.IOFlow || {};
     if (info.mode === "restore") {
       laid = restoreFromPositions(state, info.positions || {});
     } else {
-      laid = await IOF.layout.run(graph, state.nodeEls, info.positions || {});
+      laid = await IOF.layout.run(graph, state.nodeEls, info.positions || {}, stacks);
     }
     applyPositions(state, laid);
 

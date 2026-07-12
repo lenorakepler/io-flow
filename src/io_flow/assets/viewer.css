@@ -176,6 +176,19 @@ html, body {
   inset: 0;   /* origin == class node origin, matching ELK child coords */
 }
 
+/* Class-layout mode (diagram: classLayout:): the engine adds .node--stacked
+ * to stacked compounds and positions members as uniform-width rows in
+ * declaration order. Geometry (positions, uniform width) is the engine's;
+ * everything visual below is yours to edit. Default: flatten the rows so
+ * they read as a member list rather than floating boxes. */
+.node--stacked > .node__children > .node {
+  border-radius: 4px;
+  box-shadow: none;
+}
+.node--stacked > .node__children > .node:hover {
+  box-shadow: 0 1px 4px rgba(16, 24, 40, 0.14);
+}
+
 /* Compound group node: same overlay-header + inset-children layout as class,
  * with its own accent so groups read as a distinct container. */
 .node--group {

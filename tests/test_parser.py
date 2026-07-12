@@ -616,6 +616,19 @@ def test_diagram_config_passes_through():
     assert graph["diagram"]["elk"]["elk.aspectRatio"] == "2"
 
 
+def test_class_layout_config_passes_through():
+    # A bare `classLayout:` (YAML null) must survive as a *present* key: the
+    # viewer detects the mode with a presence check, not truthiness.
+    graph = parse({"nodes": {"$a": {}}, "diagram": {"classLayout": None}})
+    assert "classLayout" in graph["diagram"]
+    assert graph["diagram"]["classLayout"] is None
+
+    graph = parse(
+        {"nodes": {"$a": {}}, "diagram": {"classLayout": {"types": ["class", "group"]}}}
+    )
+    assert graph["diagram"]["classLayout"]["types"] == ["class", "group"]
+
+
 def test_relations_registers_new_edge_kinds():
     with warnings.catch_warnings():
         warnings.simplefilter("error")

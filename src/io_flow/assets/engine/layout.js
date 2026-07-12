@@ -68,13 +68,113 @@ window.IOFlow = window.IOFlow || {};
     return roots;
   }
 
-  function toElk(entry, domIndex, hints) {
+  // Class-layout mode (diagram: classLayout:): compounds of the configured
+  // types lay their members out as a UML-style stacked list (declaration
+  // order, uniform width) and face ELK as fixed-size leaves. Strict no-op
+  // when the key is absent. A bare `classLayout:` means {types: [class]};
+  // `classLayout: {types: [...]}` widens it; `classLayout: false` opts out.
+  function classLayoutTypes(graph) {
+    const d = graph.diagram;
+    if (!d || !("classLayout" in d) || d.classLayout === false) return null;
+    const cfg = d.classLayout;
+    const types = cfg && Array.isArray(cfg.types) ? cfg.types : ["class"];
+    return new Set(types.map(String));
+  }
+
+  // Plan the member stacks. viewer.js calls this once, after fonts and
+  // before layout, in BOTH sizing paths (sankey precedent: the inline sizes
+  // set here are simply read back by leaf measurement, in toElk and in
+  // restore). Geometry constants mirror compoundOptions() and
+  // restoreFromPositions' +16 so a saved, untouched stack restores
+  // pixel-identically. Returns null when the mode is off, else:
+  //   pos:   {memberId: {x, y, w, h}} parent-relative stacked positions,
+  //          merged into the laid map on the ELK path only (saved layouts win)
+  //   roots: Set of topmost stacked compound ids (ELK leaves in toElk)
+  function planStacks(graph, domIndex) {
+    const types = classLayoutTypes(graph);
+    if (!types) return null;
+    const PAD = 16; // side/bottom inset; matches compoundOptions + restore's +16
+    const GAP = 8; // row gap
+    const childrenOf = {};
+    const parentOf = {};
+    graph.nodes.forEach((n) => {
+      parentOf[n.id] = n.parent == null ? null : n.parent;
+      if (n.parent != null) (childrenOf[n.parent] = childrenOf[n.parent] || []).push(n.id);
+    });
+    const wants = {};
+    graph.nodes.forEach((n) => {
+      wants[n.id] = types.has(n.type) && !!childrenOf[n.id];
+    });
+    // A stacked class may contain leaves and nested stacked classes only;
+    // any other compound inside (a group, a method with children) makes the
+    // whole class fall back to a normal ELK compound, loudly. Recursion
+    // still reaches a stackable class nested inside the fallen-back one.
+    const ok = {};
+    const stackOk = (id) => {
+      if (ok[id] == null) {
+        ok[id] = (childrenOf[id] || []).every(
+          (c) => !childrenOf[c] || (wants[c] && stackOk(c))
+        );
+      }
+      return ok[id];
+    };
+    const cand = (id) => wants[id] && stackOk(id);
+    graph.nodes.forEach((n) => {
+      if (wants[n.id] && !stackOk(n.id)) {
+        console.warn(
+          `[io-flow] classLayout: "${n.id}" contains a non-stackable compound; falling back to ELK layout for it`
+        );
+      }
+    });
+    const roots = new Set();
+    graph.nodes.forEach((n) => {
+      if (!cand(n.id)) return;
+      let p = parentOf[n.id];
+      while (p != null && !cand(p)) p = parentOf[p];
+      if (p == null) roots.add(n.id); // no stacked ancestor: topmost
+    });
+
+    const pos = {};
+    function stackOne(id) {
+      const kids = childrenOf[id];
+      // Nested stacked classes size themselves before the parent measures them.
+      kids.forEach((c) => {
+        if (childrenOf[c]) stackOne(c);
+      });
+      // CSS hook goes on before measuring so row styling is reflected in
+      // measured sizes (measure-then-freeze).
+      domIndex[id].classList.add("node--stacked");
+      let width = 0;
+      const sizes = kids.map((c) => {
+        const r = domIndex[c].getBoundingClientRect();
+        const s = { w: Math.ceil(r.width), h: Math.ceil(r.height) };
+        if (s.w > width) width = s.w;
+        return s;
+      });
+      let y = IOF.headerH() + 8; // below the header; matches compoundOptions
+      kids.forEach((c, i) => {
+        domIndex[c].style.width = width + "px"; // uniform rows
+        pos[c] = { x: PAD, y, w: width, h: sizes[i].h };
+        y += sizes[i].h + GAP;
+      });
+      // The compound gets an explicit inline size so toElk's leaf
+      // measurement (absolutely-positioned members contribute nothing to a
+      // getBoundingClientRect otherwise) returns exactly this.
+      domIndex[id].style.width = width + 2 * PAD + "px";
+      domIndex[id].style.height = y - GAP + PAD + "px";
+    }
+    roots.forEach(stackOne);
+    return { pos, roots };
+  }
+
+  function toElk(entry, domIndex, hints, stackRoots) {
     const { node, children } = entry;
     const out = { id: node.id };
-    if (children.length) {
+    if (children.length && !(stackRoots && stackRoots.has(node.id))) {
       out.layoutOptions = compoundOptions();
-      out.children = children.map((c) => toElk(c, domIndex, hints));
+      out.children = children.map((c) => toElk(c, domIndex, hints, stackRoots));
     } else {
+      // Leaves -- and stacked compounds, whose inline size planStacks set.
       const el = domIndex[node.id];
       const r = el.getBoundingClientRect();
       // Round up to avoid sub-pixel clipping of measured content.
@@ -99,7 +199,37 @@ window.IOFlow = window.IOFlow || {};
     return out;
   }
 
-  async function run(graph, domIndex, hints) {
+  // Stacked-compound members don't exist in the elk graph (their compound
+  // is a leaf), and elkjs throws on unknown edge endpoints ("Referenced
+  // shape does not exist"), so remap member endpoints to the topmost
+  // stacked ancestor. This only shapes ELK's draft; rendered edge geometry
+  // always comes from state.pos (edges.js). An edge entirely inside one
+  // stack drops out of the elk graph but still renders.
+  function elkEdges(graph, stackRoots) {
+    const all = graph.edges.map((e, i) => ({
+      id: "edge_" + i,
+      sources: [e.source],
+      targets: [e.target],
+    }));
+    if (!stackRoots) return all;
+    const parentOf = {};
+    graph.nodes.forEach((n) => {
+      parentOf[n.id] = n.parent == null ? null : n.parent;
+    });
+    const rep = (id) => {
+      let r = id;
+      for (let cur = id; cur != null; cur = parentOf[cur]) {
+        if (stackRoots.has(cur)) r = cur; // topmost stacked ancestor wins
+      }
+      return r;
+    };
+    return all
+      .map((e) => ({ id: e.id, sources: [rep(e.sources[0])], targets: [rep(e.targets[0])] }))
+      .filter((e, i) => e.sources[0] !== e.targets[0] || graph.edges[i].source === graph.edges[i].target);
+  }
+
+  async function run(graph, domIndex, hints, stacks) {
+    const stackRoots = stacks ? stacks.roots : null;
     const roots = buildForest(graph);
     const rootOptions = rootOptionsFor(graph);
     if (hints && Object.keys(hints).length) {
@@ -108,12 +238,8 @@ window.IOFlow = window.IOFlow || {};
     const elkGraph = {
       id: "root",
       layoutOptions: rootOptions,
-      children: roots.map((r) => toElk(r, domIndex, hints)),
-      edges: graph.edges.map((e, i) => ({
-        id: "edge_" + i,
-        sources: [e.source],
-        targets: [e.target],
-      })),
+      children: roots.map((r) => toElk(r, domIndex, hints, stackRoots)),
+      edges: elkEdges(graph, stackRoots),
     };
 
     const elk = new ELK();
@@ -126,8 +252,11 @@ window.IOFlow = window.IOFlow || {};
         walk(n.children);
       });
     })(laid.children);
+    // Stacked members never went through ELK; their planned positions join
+    // the laid map here so state.pos (edges, drag, save) covers them too.
+    if (stacks) Object.assign(pos, stacks.pos);
     return pos;
   }
 
-  IOF.layout = { run };
+  IOF.layout = { run, planStacks };
 })(window.IOFlow);

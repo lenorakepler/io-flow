@@ -1,0 +1,53 @@
+# classLayout mode example: class compounds render as UML-style stacked
+# member lists -- members in declaration order at uniform width -- while ELK
+# still arranges everything outside the classes (each class faces ELK as a
+# fixed-size box). Delete the diagram: block line to compare with normal
+# ELK compound layout. Row appearance is CSS (.node--stacked in viewer.css).
+
+defaults:
+  class: method
+
+diagram:
+  classLayout: # bare key = {types: [class]}; widen with {types: [class, group]}
+
+nodes:
+  $configfile:
+    type: file
+    cli: --config
+    value: config.yaml
+
+  $Config:
+    type: class
+    loc: src/config.py
+    $from_yaml:
+      # Outside node -> member: crosses into the stacked class.
+      args:
+        path: $configfile
+    $validate: {}
+    $attributes:
+      type: attributes
+    $to_dict: {}
+
+  $Runner:
+    type: class
+    loc: src/run.py
+    $run:
+      args:
+        config: $Config
+      # Member -> member across the two classes: in the ELK draft this edge
+      # is remapped to Runner -> Config (members are invisible to ELK); the
+      # drawn edge still meets the rows themselves.
+      calls:
+        $to_dict: serialize
+    $teardown: {}
+
+  $main:
+    type: function
+    loc: src/cli.py
+    calls:
+      $run: ""
+
+# Member -> member within one class: dropped from the ELK draft entirely
+# (both endpoints collapse to Config) but still rendered between the rows.
+edges:
+  - { from: $validate, to: $to_dict, type: calls, label: then }
