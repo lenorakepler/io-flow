@@ -35,6 +35,12 @@ io-flow check example_input.yaml --strict
 
 # No-server fallback: merge a {id: [x, y]} JSON into the YAML.
 io-flow apply-layout example_input.yaml layout.json
+
+# Tidy a hand-arranged layout: left/top edges within --tolerance px of each
+# other (siblings only -- positions are parent-relative) snap to exact
+# columns/rows. Run it while `edit` is serving and watch the live reload.
+io-flow align example_input.yaml            # default tolerance: 8px
+io-flow align example_input.yaml --dry-run  # print what would move
 ```
 
 Opened over `http://localhost` (via `edit`) the **Save** button appears and
@@ -223,7 +229,8 @@ centers a node as the keyboard alternative to panning).
 
 ```
 src/io_flow/
-  cli.py            argparse: build / edit / check / apply-layout
+  cli.py            argparse: build / edit / check / apply-layout / align
+  align.py          snap almost-aligned saved positions (per sibling space)
   parser.py         two-pass YAML -> recursive graph model; EDGE_KEYS registry
   layout_store.py   layout: block read/merge (ruamel round-trip) + topology hash
   edge_store.py     append browser-created connections to edges: (append-only)

@@ -5,6 +5,7 @@ Subcommands:
   edit          build, serve on localhost, open browser (primary editing loop)
   check         parse only; report unresolved references (CI-friendly)
   apply-layout  merge a layout.json into the source YAML (no-server fallback)
+  align         snap almost-aligned saved positions to exact columns/rows
 """
 
 from __future__ import annotations
@@ -88,6 +89,34 @@ def cmd_apply_layout(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_align(args: argparse.Namespace) -> int:
+    from . import align, layout_store
+
+    input_path = Path(args.input)
+    graph = parse_file(input_path)
+    saved = layout_store.read_layout(input_path)
+    if not saved or not saved.get("positions"):
+        print(
+            f"{input_path}: no saved layout: block to align (drag + Save first)",
+            file=sys.stderr,
+        )
+        return 1
+    new_positions, moves = align.snap_positions(
+        graph, saved["positions"], tolerance=args.tolerance
+    )
+    for nid, axis, old, new in moves:
+        print(f"  {nid}: {axis} {old:g} -> {new:g}")
+    if not moves:
+        print(f"{input_path}: already aligned (tolerance {args.tolerance:g}px)")
+        return 0
+    if args.dry_run:
+        print(f"{input_path}: {len(moves)} value(s) would move (dry run; file untouched)")
+        return 0
+    layout_store.merge_positions(input_path, graph, new_positions)
+    print(f"{input_path}: aligned {len(moves)} value(s) (tolerance {args.tolerance:g}px)")
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="io-flow", description=__doc__)
     sub = p.add_subparsers(dest="command", required=True)
@@ -122,6 +151,21 @@ def build_parser() -> argparse.ArgumentParser:
     a.add_argument("input", help="input YAML file")
     a.add_argument("layout", help="layout JSON: {nodeId: [x, y]}")
     a.set_defaults(func=cmd_apply_layout)
+
+    g = sub.add_parser(
+        "align", help="snap almost-aligned saved positions to exact columns/rows"
+    )
+    g.add_argument("input", help="input YAML file (must have a saved layout: block)")
+    g.add_argument(
+        "--tolerance",
+        type=float,
+        default=8.0,
+        help="cluster spread in px that counts as 'almost aligned' (default: 8)",
+    )
+    g.add_argument(
+        "--dry-run", action="store_true", help="print what would move; don't write"
+    )
+    g.set_defaults(func=cmd_align)
 
     return p
 
