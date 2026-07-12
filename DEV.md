@@ -30,6 +30,10 @@ branch; `main` ends at `aae5a7e` and knows nothing about weights.
    proportional (not a min-height). An explicit "this is a sankey" mode
    is acceptable — rendering may differ in that mode.
 5. Nodes conceptually grouped (e.g. all sources) must share a column.
+6. Parallel outcomes are a real shape: "HR Interview" and "Communicated
+   Rejection" are both *the second stage an application can enter* and must
+   share a column; items flowing into neither are pending/ghosted and
+   simply don't flow (visible as uncovered bar height).
 
 ## What was implemented, layer by layer
 
@@ -109,6 +113,16 @@ Mechanics (all gated on the mode; strict no-ops otherwise):
   measured height kept (loud > silent).
 - In-mode weighted edges drop arrowheads (clutter at band widths;
   direction is unambiguous).
+- **Routing axis is fixed to the layout direction in-mode** (the general
+  dominant-axis rule stays for normal diagrams). Discovered via the
+  parallel-outcomes column: two layer-mates with a large vertical offset
+  flip the dominant axis, so a ribbon exits the bar's *top* face and wraps
+  around it. Sankey ribbons always leave/enter the direction-facing faces.
+- **In-mode stacks anchor at the top of the side** (left, for vertical
+  layouts) rather than centered, so unconsumed population -- the
+  pending/ghosted items -- pools visibly at the bottom of the bar. Normal
+  diagrams keep centered stacks (a lone edge should meet a box at its
+  vertical center).
 
 ### 4. `tier:` column pinning (uncommitted)
 
@@ -135,8 +149,22 @@ CSV of items × boolean funnel stages → sankey YAML + CSS skin.
   (transition, stratum value), typed `<by>_<value>` for CSS coloring,
   weighted by count. Sorted emission keeps band order consistent across
   stages.
-- Populations = items whose path visits the node; sources tier 0, stage *i*
-  tier *i+1*.
+- Populations = items whose path visits the node.
+- **Tiers are derived from the observed flow, not CSV column order**
+  (`assign_tiers`): a stage's rendered column = 1 + the max column of its
+  actual predecessors (sources = 0). Parallel outcomes fed by the same
+  upstream ("HR Interview" / "Communicated Rejection") therefore share a
+  column with no flags or configuration. One ordered pass suffices because
+  paths visit stages in CSV column order, so predecessors are always
+  tiered first.
+- **The generator pins the whole layout** via `layout_store.merge_positions`
+  into the `layout:` block (exact restore; `build` omits elkjs). Columns
+  share a top line; within a column, nodes stack top-aligned ordered by
+  outgoing flow (descending), so the outcome that flows onward sits above
+  the terminal one. The `tier:` hints remain as the ELK fallback if the
+  layout block is deleted; drag + Save re-arranges as usual. Constants
+  (unit, bar width) are mirrored from the YAML/CSS the script itself
+  writes.
 - Generated skin = packaged `viewer.css` + per-stratum
   `#edges .edge--<tag> { stroke: ... }` (**the `#edges` prefix is required**
   — a bare class loses specificity to the base `#edges .edge` stroke rule)

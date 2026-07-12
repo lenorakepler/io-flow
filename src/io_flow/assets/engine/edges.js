@@ -132,13 +132,23 @@ window.IOFlow = window.IOFlow || {};
     const sankey = sankeyUnit(state.graph) != null;
     const gap = sankey ? 0 : GAP;
     const pad = sankey ? 0 : PAD;
+    // Sankey ribbons always run along the layout direction: a mostly-
+    // vertical displacement between layer-mates would otherwise flip the
+    // dominant axis and route the ribbon around the bars via their
+    // top/bottom faces.
+    const layoutDir = String(
+      (state.graph.diagram || {}).direction || "RIGHT"
+    ).toUpperCase();
+    const sankeyHoriz = layoutDir !== "DOWN" && layoutDir !== "UP";
     const eps = state.graph.edges.map((edge) => {
       const sVis = visibleIdOf(state, edge.source);
       const tVis = visibleIdOf(state, edge.target);
       const s = boxOf(state, sVis);
       const t = boxOf(state, tVis);
-      const horiz =
-        Math.abs(t.x + t.w / 2 - (s.x + s.w / 2)) >= Math.abs(t.y + t.h / 2 - (s.y + s.h / 2));
+      const horiz = sankey
+        ? sankeyHoriz
+        : Math.abs(t.x + t.w / 2 - (s.x + s.w / 2)) >=
+          Math.abs(t.y + t.h / 2 - (s.y + s.h / 2));
       const dir = horiz
         ? t.x + t.w / 2 >= s.x + s.w / 2
           ? 1
@@ -192,7 +202,12 @@ window.IOFlow = window.IOFlow || {};
       const total =
         entries.reduce((acc, en) => acc + en.ep.band, 0) + gap * (entries.length - 1);
       const scale = side > 0 && total > side ? side / total : 1;
-      let cursor = (horiz ? box.y + box.h / 2 : box.x + box.w / 2) - (total * scale) / 2;
+      // Sankey stacks anchor at the top (left, for vertical layouts) of the
+      // side, so unconsumed population -- pending/ghosted items -- pools
+      // visibly at the bottom; normal stacks stay centered on the side.
+      let cursor = sankey
+        ? (horiz ? box.y : box.x) + pad
+        : (horiz ? box.y + box.h / 2 : box.x + box.w / 2) - (total * scale) / 2;
 
       entries.forEach((en) => {
         const mid = cursor + (en.ep.band * scale) / 2;

@@ -8,21 +8,35 @@ diagram:
   sankey: {unit: 12}
 
 nodes:
-  $linkedin: {type: source, label: 'LinkedIn', population: 6, tier: 0}
-  $referral: {type: source, label: 'Referral', population: 1, tier: 0}
-  $email_back: {type: stage, label: 'Email Back', population: 6, tier: 1}
-  $hr_interview: {type: stage, label: 'HR Interview', population: 3, tier: 2}
-  $in_person_interview: {type: stage, label: 'In-Person Interview', population: 2, tier: 3}
-  $offer: {type: stage, label: 'Offer', population: 1, tier: 4}
+  $linkedin: {type: source, label: 'LinkedIn', population: 22, tier: 0}
+  $referral: {type: source, label: 'Referral', population: 8, tier: 0}
+  $hr_interview: {type: stage, label: 'HR Interview', population: 10, tier: 1}
+  $communicated_rejection: {type: stage, label: 'Communicated Rejection', population: 10, tier: 1}
+  $in_person_interview: {type: stage, label: 'In-Person Interview', population: 5, tier: 2}
+  $offer: {type: stage, label: 'Offer', population: 2, tier: 3}
 
 edges:
-  - {from: $email_back, to: $hr_interview, type: fit_3, weight: 2, label: '3: 2'}
-  - {from: $email_back, to: $hr_interview, type: fit_4, weight: 1, label: '4: 1'}
-  - {from: $hr_interview, to: $in_person_interview, type: fit_3, weight: 1, label: '3: 1'}
-  - {from: $hr_interview, to: $in_person_interview, type: fit_4, weight: 1, label: '4: 1'}
-  - {from: $in_person_interview, to: $offer, type: fit_4, weight: 1, label: '4: 1'}
-  - {from: $linkedin, to: $email_back, type: fit_2, weight: 1, label: '2: 1'}
-  - {from: $linkedin, to: $email_back, type: fit_3, weight: 2, label: '3: 2'}
-  - {from: $linkedin, to: $email_back, type: fit_4, weight: 1, label: '4: 1'}
-  - {from: $linkedin, to: $email_back, type: fit_5, weight: 1, label: '5: 1'}
-  - {from: $referral, to: $email_back, type: fit_3, weight: 1, label: '3: 1'}
+- {from: $hr_interview, to: $in_person_interview, type: fit_4, weight: 3, label: '4: 3'}
+- {from: $hr_interview, to: $in_person_interview, type: fit_5, weight: 2, label: '5: 2'}
+- {from: $in_person_interview, to: $offer, type: fit_4, weight: 1, label: '4: 1'}
+- {from: $in_person_interview, to: $offer, type: fit_5, weight: 1, label: '5: 1'}
+- {from: $linkedin, to: $communicated_rejection, type: fit_2, weight: 3, label: '2: 3'}
+- {from: $linkedin, to: $communicated_rejection, type: fit_3, weight: 4, label: '3: 4'}
+- {from: $linkedin, to: $communicated_rejection, type: fit_4, weight: 1, label: '4: 1'}
+- {from: $linkedin, to: $communicated_rejection, type: fit_5, weight: 1, label: '5: 1'}
+- {from: $linkedin, to: $hr_interview, type: fit_2, weight: 1, label: '2: 1'}
+- {from: $linkedin, to: $hr_interview, type: fit_3, weight: 2, label: '3: 2'}
+- {from: $linkedin, to: $hr_interview, type: fit_4, weight: 2, label: '4: 2'}
+- {from: $linkedin, to: $hr_interview, type: fit_5, weight: 1, label: '5: 1'}
+- {from: $referral, to: $communicated_rejection, type: fit_3, weight: 1, label: '3: 1'}
+- {from: $referral, to: $hr_interview, type: fit_3, weight: 1, label: '3: 1'}
+- {from: $referral, to: $hr_interview, type: fit_4, weight: 2, label: '4: 2'}
+- {from: $referral, to: $hr_interview, type: fit_5, weight: 1, label: '5: 1'}
+layout:
+  _topology: 04df91524e8bfe52
+  linkedin: [0, 0]
+  referral: [0, 304]
+  hr_interview: [132, 0]
+  communicated_rejection: [132, 160]
+  in_person_interview: [264, 0]
+  offer: [396, 0]

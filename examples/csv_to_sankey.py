@@ -84,6 +84,26 @@ def build_edges(rows, stages, source_col, by):
     return edges, dict(populations)
 
 
+def assign_tiers(stages, edges, source_slugs):
+    """{node_slug: tier} derived from the observed flow, not column order.
+
+    A stage's tier is 1 + the max tier of its actual predecessors, so
+    parallel outcomes fed by the same upstream (e.g. "HR Interview" and
+    "Communicated Rejection", both entered straight from sources) share a
+    column. Paths visit stages in CSV column order, so one ordered pass
+    sees every predecessor already tiered. A stage nothing flows into
+    falls back to one past the previous stage's tier.
+    """
+    tier = {s: 0 for s in source_slugs}
+    prev = 0
+    for st in stages:
+        sid = slug(st)
+        preds = [tier[a] for (a, b, _v, _n) in edges if b == sid and a in tier]
+        tier[sid] = (max(preds) + 1) if preds else (prev + 1)
+        prev = tier[sid]
+    return tier
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("csv_path", help="input CSV")
@@ -133,17 +153,21 @@ def main(argv=None) -> int:
         "",
         "nodes:",
     ]
-    # tier: pins each column -- all sources share x, each stage is its own
-    # column even when paths skip stages.
+    # tier: pins rendered columns. Sources share column 0; each stage's
+    # column comes from the observed flow (assign_tiers), so parallel
+    # outcomes -- "HR Interview" vs "Communicated Rejection", both entered
+    # straight from a source -- share a column.
+    tiers = assign_tiers(stages, edges, {slug(s) for s in sources})
     for s in sources:
         pop = populations.get(slug(s), 0)
         lines.append(
             f"  ${slug(s)}: {{type: source, label: {s!r}, population: {pop}, tier: 0}}"
         )
-    for i, st in enumerate(stages):
+    for st in stages:
         pop = populations.get(slug(st), 0)
         lines.append(
-            f"  ${slug(st)}: {{type: stage, label: {st!r}, population: {pop}, tier: {i + 1}}}"
+            f"  ${slug(st)}: {{type: stage, label: {st!r}, population: {pop}, "
+            f"tier: {tiers[slug(st)]}}}"
         )
     lines.append("")
     lines.append("edges:")
@@ -186,7 +210,37 @@ def main(argv=None) -> int:
     )
     css_out.write_text("\n".join(css) + "\n", encoding="utf-8")
 
-    print(f"wrote {out} ({len(edges)} bands) and {css_out}")
+    # Deterministic sankey layout, written into the layout: block so the
+    # browser restores it exactly (no ELK draft to fight; `build` omits
+    # elkjs entirely). Columns share a top line; within a column, nodes
+    # stack top-aligned ordered by outgoing flow -- the outcome that flows
+    # onward (HR Interview) sits above the terminal one (Communicated
+    # Rejection). Drag + Save still re-arranges as usual.
+    from io_flow.layout_store import merge_positions
+    from io_flow.parser import parse_file
+
+    unit = 12  # keep in sync with the diagram: sankey: block above
+    bar_w = 22  # keep in sync with the node width in the generated CSS
+    layer_gap = 110
+    node_gap = 40
+    out_flow: Counter = Counter()
+    for a, _b, _v, n in edges:
+        out_flow[a] += n
+    columns: dict[int, list[str]] = {}
+    for s in sources:
+        columns.setdefault(0, []).append(slug(s))
+    for st in stages:
+        columns.setdefault(tiers[slug(st)], []).append(slug(st))
+    positions: dict[str, list[float]] = {}
+    for t, ids in columns.items():
+        ids.sort(key=lambda i: (-out_flow[i], -populations.get(i, 0), i))
+        y = 0
+        for nid in ids:
+            positions[nid] = [t * (bar_w + layer_gap), y]
+            y += populations.get(nid, 0) * unit + node_gap
+    merge_positions(out, parse_file(out), positions)
+
+    print(f"wrote {out} ({len(edges)} bands, layout pinned) and {css_out}")
     for i, v in enumerate(strata):
         print(f"  {PALETTE[i % len(PALETTE)]}  {v}")
     print(f"view:  io-flow edit {out} --css {css_out}")
