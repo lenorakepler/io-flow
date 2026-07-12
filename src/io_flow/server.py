@@ -1,10 +1,12 @@
 """Localhost server for the primary ``io-flow edit`` loop.
 
 Stdlib only. Serves the built HTML at ``/`` and accepts ``POST /save`` with
-``{"positions": {id: [x, y]}}``. The HTML is rebuilt from the source YAML on
-every GET, so editing the YAML and refreshing the browser is a live loop; a
-parse failure serves the error as plain text instead of killing the server.
-On save it merges positions into the source YAML (comments preserved via
+``{"positions": {id: [x, y]}, "new_edges"?: [{from, to, type?, label?}]}``.
+The HTML is rebuilt from the source YAML on every GET, so editing the YAML
+and refreshing the browser is a live loop; a parse failure serves the error
+as plain text instead of killing the server. On save it appends any
+browser-created connections to the YAML's ``edges:`` list (append-only, via
+:mod:`edge_store`), merges positions (comments preserved via
 :mod:`layout_store`), re-emits the HTML, and also refreshes the on-disk
 ``diagram.html`` so the leftover file is always current.
 """
@@ -17,7 +19,7 @@ from pathlib import Path
 
 import html as _html
 
-from . import emit, layout_store
+from . import edge_store, emit, layout_store
 from .parser import parse_file
 
 
@@ -90,7 +92,8 @@ class _Handler(BaseHTTPRequestHandler):
         try:
             payload = json.loads(raw or b"{}")
             positions = payload.get("positions", payload)
-            app.save(positions)
+            new_edges = payload.get("new_edges") if isinstance(payload, dict) else None
+            app.save(positions, new_edges)
             self._send(200, b'{"ok":true}', "application/json")
         except Exception as exc:  # pragma: no cover - defensive
             body = json.dumps({"ok": False, "error": str(exc)}).encode("utf-8")
@@ -148,7 +151,11 @@ class LayoutServer:
         self.html = emit.build_html(graph, css=self.css, templates=self.templates)
         self.out_path.write_text(self.html, encoding="utf-8")
 
-    def save(self, positions: dict) -> None:
+    def save(self, positions: dict, new_edges: list | None = None) -> None:
+        # Append edges first, then re-parse so the merged topology hash covers
+        # them -- otherwise the next load would see a "changed" topology.
+        if new_edges:
+            edge_store.append_edges(self.input_path, parse_file(self.input_path), new_edges)
         graph = parse_file(self.input_path)
         layout_store.merge_positions(self.input_path, graph, positions)
         self.rebuild()

@@ -24,9 +24,10 @@ uv tool install .        # or: install the `io-flow` command globally
 io-flow build example_input.yaml -o diagram.html
 
 # Primary editing loop: build, serve on localhost, open browser.
-# Drag nodes -> click "Save layout" -> Ctrl-C. The YAML gains a compact
-# `layout:` block; the leftover diagram.html is the portable viewer.
-# The browser live-reloads whenever the YAML (or a skin file) changes.
+# Drag nodes, create connections (Connect button), click "Save layout",
+# Ctrl-C. The YAML gains a compact `layout:` block and new `edges:` entries;
+# the leftover diagram.html is the portable viewer. The browser live-reloads
+# whenever the YAML (or a skin file) changes.
 io-flow edit example_input.yaml
 
 # Validate only; --strict exits nonzero on unresolved references (CI).
@@ -183,7 +184,16 @@ collapse, ui) and rarely needs editing.
   children re-anchor to the container.
 - **Filter box** (top-left): dims non-matches; Enter selects and centers the
   first match; Escape clears. A **legend** shows each node type present.
-- **Save layout** (edit mode): writes positions into the YAML's `layout:` block.
+- **Connect** (edit mode): toggle the Connect button, click a source node,
+  then a target node — the edge appears immediately, with optional type/label
+  from the small form (type suggestions come from the edges already present;
+  any free-form tag works). Repeat to add more; Escape or the button exits.
+  **Append-only by design**: the browser can add explicit edges but never
+  delete or rewrite existing ones — derived edges live woven into your
+  hand-written relation blocks, so removal is a YAML edit (live reload makes
+  that loop fast). Unsaved connections are lost on reload, same as drags.
+- **Save layout** (edit mode): writes positions into the YAML's `layout:`
+  block and appends browser-created connections to the `edges:` list.
 - **Live reload** (edit mode): edit the YAML in your editor and the browser
   refreshes itself; a parse error shows in the browser and recovers on fix.
   Unsaved drag positions are lost on reload — the file is the source of truth.
@@ -201,6 +211,8 @@ generates a parallel text representation from the same graph model:
   Escape clears, and selections are announced via a live region.
 - **Arrow keys nudge** the focused node by 8px (Shift for 1px), with the same
   parent clamping as mouse drag — layout editing works without a pointer.
+- **Connect mode works from the keyboard**: with the mode active, Enter/Space
+  on a focused node picks it as source, then target — same flow as clicking.
 - Collapse toggles carry `aria-expanded` and name their target; the search
   field, legend, notice, and save-state changes are labeled/announced.
 
@@ -214,13 +226,14 @@ src/io_flow/
   cli.py            argparse: build / edit / check / apply-layout
   parser.py         two-pass YAML -> recursive graph model; EDGE_KEYS registry
   layout_store.py   layout: block read/merge (ruamel round-trip) + topology hash
+  edge_store.py     append browser-created connections to edges: (append-only)
   emit.py           inline JSON + CSS + JS into one self-contained HTML
   server.py         stdlib http.server: rebuild-on-GET, POST /save, /version
   assets/
     viewer.html     skeleton with style/graph/script slots
     viewer.css      <- user-editable: all node/edge styling
     templates.js    <- user-editable: node templates + sidebar templates
-    engine/         layout edges dim drag pan save live collapse ui viewer
+    engine/         layout edges dim drag pan save connect live collapse ui viewer
     vendor/         elk.bundled.js, panzoom.min.js
 tests/              parser, layout_store, emit, server, cli
 ```

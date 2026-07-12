@@ -85,7 +85,7 @@ window.IOFlow = window.IOFlow || {};
 
     // 5. Optional interaction modules.
     IOF.state = state;
-    [IOF.pan, IOF.dim, IOF.drag, IOF.resize, IOF.save, IOF.live, IOF.collapse, IOF.ui, IOF.a11y].forEach((mod) => {
+    [IOF.pan, IOF.dim, IOF.drag, IOF.resize, IOF.save, IOF.connect, IOF.live, IOF.collapse, IOF.ui, IOF.a11y].forEach((mod) => {
       if (mod && typeof mod.init === "function") mod.init(state);
     });
 

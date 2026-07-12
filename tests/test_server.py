@@ -88,6 +88,44 @@ def test_save_merges_positions_and_preserves_comments(served):
     assert "_topology:" in text
 
 
+def _post_save(srv, payload):
+    req = urllib.request.Request(
+        srv.url.rstrip("/") + "/save",
+        data=json.dumps(payload).encode(),
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    with urllib.request.urlopen(req) as r:
+        return json.loads(r.read())
+
+
+def test_save_appends_new_edges_and_hash_covers_them(served):
+    src, srv = served
+    result = _post_save(
+        srv,
+        {
+            "positions": {"cfg": [10, 20], "run": [200, 20]},
+            "new_edges": [{"from": "run", "to": "cfg", "type": "calls", "label": "reload"}],
+        },
+    )
+    assert result["ok"] is True
+    text = src.read_text(encoding="utf-8")
+    assert "- {from: $run, to: $cfg, type: calls, label: reload}" in text
+    assert "# inline comment" in text
+    # Edges were appended before the hash was computed, so the next build
+    # restores exactly (all positions saved + topology matches).
+    _status, body = _get(srv)
+    assert '"mode": "restore"' in body or '"mode":"restore"' in body
+
+
+def test_save_new_edges_do_not_duplicate_on_resave(served):
+    src, srv = served
+    edge = {"from": "run", "to": "cfg", "type": "calls"}
+    _post_save(srv, {"positions": {}, "new_edges": [edge]})
+    _post_save(srv, {"positions": {}, "new_edges": [edge]})  # stale client resend
+    assert src.read_text(encoding="utf-8").count("{from: $run, to: $cfg") == 1
+
+
 def test_version_changes_when_yaml_touched(served):
     src, srv = served
     _status, body = _get(srv, "/version")

@@ -145,6 +145,9 @@ window.IOFlow = window.IOFlow || {};
         if (ev.key === "Enter" || ev.key === " ") {
           ev.preventDefault();
           ev.stopPropagation();
+          // Connect mode consumes picks first, so edge creation works from
+          // the keyboard exactly like selection does.
+          if (IOF.connect && IOF.connect.pick(state, n.id)) return;
           IOF.dim.select(state, n.id);
         } else if (ev.key.startsWith("Arrow")) {
           ev.preventDefault();

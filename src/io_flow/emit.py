@@ -29,6 +29,7 @@ SCRIPT_MANIFEST = [
     "engine/drag.js",
     "engine/resize.js",
     "engine/save.js",
+    "engine/connect.js",
     "engine/live.js",
     "engine/collapse.js",
     "engine/ui.js",

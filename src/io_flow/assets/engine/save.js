@@ -3,7 +3,9 @@
  * Visible only when served over http(s) AND a `/save` endpoint answers a ping
  * (i.e. `io-flow edit`). Opened from file:// it stays hidden and everything
  * else still works. Posts the live parent-relative positions (`state.pos`),
- * the same coordinate space layout_store restores from.
+ * the same coordinate space layout_store restores from, plus any connections
+ * created in-browser (`state.pendingEdges`, queued by connect.js) for the
+ * server to append to the YAML's `edges:` list.
  */
 window.IOFlow = window.IOFlow || {};
 (function (IOF) {
@@ -63,15 +65,26 @@ window.IOFlow = window.IOFlow || {};
         ? [Math.round(p.x), Math.round(p.y), Math.round(p.w), Math.round(p.h)]
         : [Math.round(p.x), Math.round(p.y)];
     });
+    // Connections created in-browser ride along; the server appends them to
+    // the YAML's `edges:` list ($-marking happens server-side).
+    const newEdges = (state.pendingEdges || []).map((e) => {
+      const spec = { from: e.source, to: e.target };
+      if (e.type) spec.type = e.type;
+      if (e.label) spec.label = e.label;
+      return spec;
+    });
     btn.disabled = true;
     btn.textContent = "Saving…";
     try {
       const r = await fetch("/save", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ positions }),
+        body: JSON.stringify(
+          newEdges.length ? { positions, new_edges: newEdges } : { positions }
+        ),
       });
       if (!r.ok) throw new Error("HTTP " + r.status);
+      if (state.pendingEdges) state.pendingEdges.length = 0;
       dirty = false;
       btn.textContent = "Saved";
       // Our own write just changed the YAML's mtime; rebase the live-reload

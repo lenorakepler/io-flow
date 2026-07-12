@@ -29,6 +29,15 @@
     </div>
     <aside id="sidebar" aria-label="Node details" hidden></aside>
     <div id="notice" role="status" hidden></div>
+    <div id="connect-bar" hidden>
+      <span id="connect-hint" role="status">Click a source node.</span>
+      <input id="connect-type" list="connect-types" placeholder="type (optional)"
+             aria-label="Edge type" autocomplete="off">
+      <datalist id="connect-types"></datalist>
+      <input id="connect-label" placeholder="label (optional)"
+             aria-label="Edge label" autocomplete="off">
+    </div>
+    <button id="connect-btn" aria-pressed="false" hidden>Connect</button>
     <button id="save-btn" aria-live="polite" hidden>Save layout</button>
   </div>
 
