@@ -39,11 +39,41 @@ window.IOFlow = window.IOFlow || {};
   const PAD = 8; // stack inset from the side's corners
   const BASE_BAND = 2; // nominal band for unweighted edges (~CSS stroke width)
 
-  // Map numeric edge weights to stroke widths. Proportional to the diagram's
-  // heaviest flow, sqrt-damped so a 100x volume isn't a 100x line. Returns
-  // null for unweighted edges (their width stays a viewer.css concern).
-  // Config: diagram: edgeWidth: {min: 1.5, max: 12, scale: sqrt | linear}.
+  // Sankey mode: `diagram: sankey:` declares that node populations and edge
+  // weights are the same data unit and must render exactly proportionally --
+  // node height = population * unit (applied by viewer.js), band width =
+  // weight * unit, and bands tile node sides contiguously (no gap, no
+  // inset), so when the data conserves, a node's incoming bands sum to
+  // precisely its height. Returns the px-per-item unit, or null when the
+  // diagram is not a sankey. `sankey: {unit: 12}` sets it explicitly;
+  // otherwise it auto-scales so the largest population/weight is ~160px.
+  function sankeyUnit(graph) {
+    const cfg = graph.diagram && graph.diagram.sankey;
+    if (cfg == null || cfg === false) return null;
+    const explicit = typeof cfg === "object" ? +cfg.unit : NaN;
+    if (explicit > 0) return explicit;
+    let top = 0;
+    graph.nodes.forEach((n) => {
+      const p = n.data && n.data.population;
+      if (typeof p === "number" && p > top) top = p;
+    });
+    graph.edges.forEach((e) => {
+      if (typeof e.weight === "number" && e.weight > top) top = e.weight;
+    });
+    return top > 0 ? 160 / top : 12;
+  }
+
+  // Map numeric edge weights to stroke widths. In sankey mode widths are
+  // purely linear (weight * unit, additive by construction). Otherwise
+  // proportional to the diagram's heaviest flow, sqrt-damped so a 100x
+  // volume isn't a 100x line, via diagram: edgeWidth: {min, max, scale}.
+  // Returns null for unweighted edges (width stays a viewer.css concern).
   function weightScale(graph) {
+    const unit = sankeyUnit(graph);
+    if (unit != null) {
+      return (edge) =>
+        typeof edge.weight === "number" && edge.weight > 0 ? edge.weight * unit : null;
+    }
     const weights = graph.edges
       .map((e) => e.weight)
       .filter((w) => typeof w === "number" && w > 0);
@@ -97,6 +127,11 @@ window.IOFlow = window.IOFlow || {};
   // stacking step — the exact source/target anchor points.
   function computeGeometry(state) {
     const widthOf = weightScale(state.graph);
+    // Sankey bands tile their node side edge-to-edge; normal diagrams keep
+    // breathing room between anchor bands.
+    const sankey = sankeyUnit(state.graph) != null;
+    const gap = sankey ? 0 : GAP;
+    const pad = sankey ? 0 : PAD;
     const eps = state.graph.edges.map((edge) => {
       const sVis = visibleIdOf(state, edge.source);
       const tVis = visibleIdOf(state, edge.target);
@@ -153,15 +188,15 @@ window.IOFlow = window.IOFlow || {};
 
       const box = entries[0].box;
       const horiz = entries[0].ep.horiz; // uniform per group (key includes axis)
-      const side = (horiz ? box.h : box.w) - 2 * PAD;
+      const side = (horiz ? box.h : box.w) - 2 * pad;
       const total =
-        entries.reduce((acc, en) => acc + en.ep.band, 0) + GAP * (entries.length - 1);
+        entries.reduce((acc, en) => acc + en.ep.band, 0) + gap * (entries.length - 1);
       const scale = side > 0 && total > side ? side / total : 1;
       let cursor = (horiz ? box.y + box.h / 2 : box.x + box.w / 2) - (total * scale) / 2;
 
       entries.forEach((en) => {
         const mid = cursor + (en.ep.band * scale) / 2;
-        cursor += (en.ep.band + GAP) * scale;
+        cursor += (en.ep.band + gap) * scale;
         // Which face of the box: the source exits toward dir, the target is
         // entered from the opposite face.
         const plusFace = en.end === "s" ? en.ep.dir > 0 : en.ep.dir < 0;
@@ -237,6 +272,7 @@ window.IOFlow = window.IOFlow || {};
     Array.from(svg.querySelectorAll("path.edge")).forEach((p) => p.remove());
     Array.from(svg.querySelectorAll("text.edge-label")).forEach((t) => t.remove());
     state.edgeEls = [];
+    const sankey = sankeyUnit(state.graph) != null;
     const eps = computeGeometry(state);
     eps.forEach(({ edge, width }) => {
       const p = document.createElementNS(SVGNS, "path");
@@ -247,7 +283,11 @@ window.IOFlow = window.IOFlow || {};
           (width != null ? " edge--weighted" : "")
       );
       if (width != null) p.style.strokeWidth = width.toFixed(1) + "px";
-      p.setAttribute("marker-end", width != null ? "url(#arrow-flow)" : "url(#arrow)");
+      // Sankey ribbons carry no arrowheads (direction is unambiguous and
+      // the triangles read as clutter at band widths).
+      if (!(sankey && width != null)) {
+        p.setAttribute("marker-end", width != null ? "url(#arrow-flow)" : "url(#arrow)");
+      }
       p.setAttribute("data-source", edge.source);
       p.setAttribute("data-target", edge.target);
       if (edge.type) p.setAttribute("data-type", edge.type);
@@ -289,5 +329,5 @@ window.IOFlow = window.IOFlow || {};
     state.svg.setAttribute("height", maxY + 80);
   }
 
-  IOF.edges = { renderAll, updateFor, resize, isAncestor };
+  IOF.edges = { renderAll, updateFor, resize, isAncestor, sankeyUnit };
 })(window.IOFlow);

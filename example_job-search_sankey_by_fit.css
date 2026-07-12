@@ -1,0 +1,439 @@
+/* viewer.css — USER-EDITABLE SURFACE (2 of 2).
+ *
+ * ALL node appearance lives here. Change a color, spacing, badge, or add a
+ * `.node--<newtype>` rule without touching any engine file. The engine only
+ * relies on: `.node` being `position: absolute`, and `.node__children` being
+ * the child-mount point inside compound nodes.
+ */
+
+:root {
+  /* Compound-node header height. The engine reads this via IOF.headerH() for
+   * ELK padding, drag clamping, and collapse — change it here only. */
+  --header-h: 32px;
+
+  --bg: #f6f7f9;
+  --ink: #1f2933;
+  --muted: #6b7280;
+  --line: #9aa5b1;
+  --edge: #7b8794;
+
+  --file: #2f6feb;
+  --option: #7c3aed;
+  --param: #0e9f6e;
+  --function: #d97706;
+  --method: #db2777;
+  --class: #334155;
+  --attr: #0891b2;
+  --group: #b45309;
+}
+
+* { box-sizing: border-box; }
+
+/* Visually hidden but exposed to assistive tech (a11y.js text layers). */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+html, body {
+  margin: 0;
+  height: 100%;
+  font: 14px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  color: var(--ink);
+  background: var(--bg);
+}
+
+#app { position: fixed; inset: 0; overflow: hidden; }
+
+#viewport {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  cursor: grab;
+}
+#viewport:active { cursor: grabbing; }
+
+#canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  transform-origin: 0 0;
+}
+
+#edges {
+  position: absolute;
+  top: 0;
+  left: 0;
+  overflow: visible;
+  pointer-events: none;
+}
+#edges .edge {
+  fill: none;
+  stroke: var(--edge);
+  stroke-width: 1.6;
+  transition: opacity 0.18s ease;
+}
+#edges #arrow path,
+#edges #arrow-flow path { fill: var(--edge); }
+/* Weighted edges read better translucent (crossings stay legible) and solid
+ * (per-type dashes turn into bricks at flow widths). */
+#edges .edge--weighted { stroke-opacity: 0.55; stroke-dasharray: none; }
+
+/* Per-type edge styling — every edge carries `edge--<type>` (the YAML edge
+ * kind: args / calls / returns / any custom tag). Add rules freely. */
+.edge--calls { stroke-dasharray: 6 4; }
+.edge--returns { stroke-dasharray: 2 3; }
+#edges .edge-label {
+  fill: var(--muted);
+  font: 11px ui-sans-serif, system-ui, sans-serif;
+  paint-order: stroke;
+  stroke: var(--bg, #fff);
+  stroke-width: 3px;
+  dominant-baseline: middle;
+}
+
+/* ---- Nodes ---------------------------------------------------------------- */
+.node {
+  position: absolute;
+  max-width: 260px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.06);
+  cursor: pointer;
+  user-select: none;
+  transition: opacity 0.18s ease, box-shadow 0.12s ease;
+}
+.node:hover { box-shadow: 0 2px 8px rgba(16, 24, 40, 0.14); }
+.node:focus-visible,
+.node__collapse:focus-visible,
+#sidebar .sb-close:focus-visible {
+  outline: 2px solid var(--file);
+  outline-offset: 2px;
+}
+
+.node__title { font-weight: 600; white-space: nowrap; }
+.node__meta { color: var(--muted); font-size: 12px; margin-top: 2px; white-space: nowrap; }
+.node__meta code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+.node__badge {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  padding: 1px 6px;
+  border-radius: 999px;
+  color: #fff;
+  vertical-align: middle;
+}
+
+/* Per-type accents: left border + badge color. */
+.node--file { border-left: 4px solid var(--file); }
+.node--file .node__badge { background: var(--file); }
+.node--option { border-left: 4px solid var(--option); }
+.node--option .node__badge { background: var(--option); }
+.node--parameter { border-left: 4px solid var(--param); }
+.node--parameter .node__badge { background: var(--param); }
+.node--function { border-left: 4px solid var(--function); }
+.node--method { border-left: 4px solid var(--method); }
+.node--attributes { border-left: 4px solid var(--attr); background: #f0fbff; }
+
+/* Compound class node wraps its children. The children mount shares the class
+ * node's origin (inset:0) so ELK's parent-relative child coordinates map 1:1;
+ * the header is an absolute overlay sitting in ELK's reserved top padding. */
+.node--class {
+  background: rgba(51, 65, 85, 0.05);
+  border: 1px dashed var(--class);
+  max-width: none;
+  padding: 0;
+  cursor: pointer;
+}
+.node--class .node__header {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: var(--header-h);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 10px;
+  border-bottom: 1px dashed var(--class);
+  background: rgba(51, 65, 85, 0.08);
+  border-radius: 8px 8px 0 0;
+  z-index: 1;
+}
+.node--class .node__children {
+  position: absolute;
+  inset: 0;   /* origin == class node origin, matching ELK child coords */
+}
+
+/* Compound group node: same overlay-header + inset-children layout as class,
+ * with its own accent so groups read as a distinct container. */
+.node--group {
+  background: rgba(180, 83, 9, 0.05);
+  border: 1px dashed var(--group);
+  max-width: none;
+  padding: 0;
+  cursor: pointer;
+}
+.node--group .node__header {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: var(--header-h);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 10px;
+  border-bottom: 1px dashed var(--group);
+  background: rgba(180, 83, 9, 0.1);
+  border-radius: 8px 8px 0 0;
+  z-index: 1;
+}
+.node--group .node__children {
+  position: absolute;
+  inset: 0;
+}
+
+/* An empty compound (class/group with no members yet) sizes to its header
+ * text like a leaf: the header sits in normal flow instead of overlaying the
+ * (nonexistent) children. The engine adds .node--empty (viewer.js). */
+.node--empty .node__header {
+  position: static;
+  border-bottom: none;
+  border-radius: 8px;
+}
+
+/* ---- Resize handle (compounds only) ----------------------------------------- */
+.node__resize {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 14px;
+  height: 14px;
+  cursor: nwse-resize;
+  z-index: 2;
+  touch-action: none;
+}
+.node__resize::after {
+  content: "";
+  position: absolute;
+  right: 3px;
+  bottom: 3px;
+  width: 7px;
+  height: 7px;
+  border-right: 2px solid var(--line);
+  border-bottom: 2px solid var(--line);
+  border-radius: 0 0 3px 0;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+.node:hover > .node__resize::after { opacity: 1; }
+.node--collapsed .node__resize { display: none; }
+
+/* ---- Collapse --------------------------------------------------------------- */
+.node--collapsed .node__children { display: none; }
+.node--collapsed .node__header { border-bottom: none; border-radius: 8px; }
+.node__collapse {
+  border: none;
+  background: none;
+  cursor: pointer;
+  font-size: 11px;
+  line-height: 1;
+  color: var(--muted);
+  padding: 2px;
+}
+
+/* ---- HUD: search + legend --------------------------------------------------- */
+#hud {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  z-index: 25;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: flex-start;
+}
+#search {
+  width: 200px;
+  padding: 6px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  font: inherit;
+  font-size: 13px;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.06);
+}
+#legend {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+/* Legend rows are mini node chips (`.node node--<type>`) so they follow any
+ * user styling automatically; the overrides below undo positioning only. */
+#legend .node {
+  position: static;
+  padding: 2px 8px;
+  font-size: 11px;
+  cursor: default;
+  max-width: none;
+  box-shadow: none;
+}
+#legend .node .node__title { font-weight: 500; font-size: 11px; }
+
+/* ---- Dim (M3) ------------------------------------------------------------- */
+.dimmed { opacity: 0.12; }
+.node.dimmed { pointer-events: none; }
+
+/* ---- Sidebar (M3) --------------------------------------------------------- */
+#sidebar {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 300px;
+  height: 100%;
+  padding: 18px 20px;
+  background: #fff;
+  border-left: 1px solid var(--line);
+  box-shadow: -2px 0 12px rgba(16, 24, 40, 0.08);
+  overflow-y: auto;
+  z-index: 20;
+}
+#sidebar[hidden] { display: none; }
+#sidebar h2 { margin: 0 0 4px; font-size: 16px; word-break: break-all; }
+#sidebar .sb-type { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; }
+#sidebar dl { margin: 16px 0 0; display: grid; grid-template-columns: auto 1fr; gap: 6px 12px; }
+#sidebar dt { color: var(--muted); font-size: 12px; }
+#sidebar dd { margin: 0; word-break: break-word; }
+#sidebar .sb-close {
+  position: absolute; top: 12px; right: 12px;
+  border: none; background: none; font-size: 20px; line-height: 1; cursor: pointer; color: var(--muted);
+}
+
+/* ---- Notice + save button ------------------------------------------------- */
+#notice {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 30;
+  padding: 8px 14px;
+  background: #fffbeb;
+  border: 1px solid #f59e0b;
+  border-radius: 8px;
+  font-size: 13px;
+  color: #92400e;
+  box-shadow: 0 2px 8px rgba(16, 24, 40, 0.12);
+}
+#notice[hidden] { display: none; }
+
+#save-btn {
+  position: absolute;
+  bottom: 18px;
+  right: 18px;
+  z-index: 30;
+  padding: 10px 18px;
+  border: none;
+  border-radius: 8px;
+  background: var(--file);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 2px 10px rgba(16, 24, 40, 0.2);
+}
+#save-btn[hidden] { display: none; }
+#save-btn:disabled { opacity: 0.6; cursor: default; }
+
+/* ---- Connect mode (create edges in edit mode; append-only) ----------------- */
+#connect-btn {
+  position: absolute;
+  bottom: 64px;
+  right: 18px;
+  z-index: 30;
+  padding: 10px 18px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 2px 10px rgba(16, 24, 40, 0.2);
+}
+#connect-btn[hidden] { display: none; }
+#connect-btn[aria-pressed="true"] {
+  background: var(--ink);
+  border-color: var(--ink);
+  color: #fff;
+}
+#connect-bar {
+  position: absolute;
+  bottom: 112px;
+  right: 18px;
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 240px;
+  padding: 10px 12px;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  font-size: 13px;
+  box-shadow: 0 2px 10px rgba(16, 24, 40, 0.12);
+}
+#connect-bar[hidden] { display: none; }
+#connect-hint { color: var(--muted); }
+#connect-bar input {
+  padding: 6px 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  font: inherit;
+  font-size: 13px;
+}
+body.connecting #viewport,
+body.connecting #viewport .node { cursor: crosshair; }
+.node.connect-source {
+  outline: 2px dashed var(--file);
+  outline-offset: 2px;
+}
+
+body:not(.ready) #canvas { visibility: hidden; }
+
+
+/* --- csv_to_sankey: Fit strata --------------------- */
+#edges .edge--fit_2 { stroke: #2f6feb; }  /* 2 */
+#edges .edge--fit_3 { stroke: #d97706; }  /* 3 */
+#edges .edge--fit_4 { stroke: #0e9f6e; }  /* 4 */
+#edges .edge--fit_5 { stroke: #db2777; }  /* 5 */
+
+/* Sankey bar look: the node box IS the bar (its height is the data), so the
+ * label moves outside, below the bar. #canvas scoping spares the legend. */
+#canvas .node--source, #canvas .node--stage {
+  width: 22px;
+  padding: 0;
+  background: #64748b;
+  border: none;
+  border-radius: 3px;
+}
+#canvas .node--source .node__title, #canvas .node--stage .node__title {
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  margin-top: 5px;
+  font-weight: 600;
+  white-space: nowrap;
+}

@@ -34,11 +34,27 @@ window.IOFlow = window.IOFlow || {};
     const parentIds = new Set(
       graph.nodes.map((n) => n.parent).filter((p) => p != null)
     );
+    // Sankey mode (diagram: sankey:): a node's population is data, and its
+    // height is that data rendered exactly (population * unit px). Set
+    // inline before measurement so both sizing paths -- ELK and restore --
+    // pick it up; edges.js draws bands on the same unit, so incoming bands
+    // tile the height when the data conserves.
+    const sankeyUnit = IOF.edges.sankeyUnit ? IOF.edges.sankeyUnit(graph) : null;
     graph.nodes.forEach((n) => {
       const el = document.createElement("div");
       el.className = "node node--" + n.type;
       el.setAttribute("data-node-id", n.id);
       el.innerHTML = IOF.renderNode(n);
+      if (sankeyUnit != null) {
+        const population = n.data && n.data.population;
+        if (typeof population === "number" && population > 0) {
+          el.style.height = population * sankeyUnit + "px";
+        } else if (!parentIds.has(n.id)) {
+          console.warn(
+            `[io-flow] sankey mode: node "${n.id}" has no numeric population; using its measured height`
+          );
+        }
+      }
       state.nodeEls[n.id] = el;
       let mount = el.querySelector(".node__children");
       if (!mount && parentIds.has(n.id)) {

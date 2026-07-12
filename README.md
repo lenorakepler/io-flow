@@ -95,6 +95,11 @@ Inside a node's mapping:
   two things naturally share a name, pick unique names — dots carry no
   meaning, so `$Config.run` and `$Runner.run` are just two names — and label
   them for display.
+- **`tier:`** — optional integer column constraint (ordinary data, read by
+  the layout): all nodes sharing a tier render in the same layer — an
+  invisible grouping tier, e.g. every sankey source in one column. Lower
+  tiers sit earlier in the layout direction. Only shapes the ELK draft;
+  saved layouts still win.
 - **relation names** (`args`/`calls`/`returns`/registered) — edge blocks.
 - **`edges:`** — a locally-declared explicit-edge list, handy for keeping a
   group's internal wiring inside the group. An omitted `from`/`to` defaults
@@ -137,6 +142,30 @@ edges:
 diagram:
   edgeWidth: {min: 1.5, max: 12, scale: sqrt}  # defaults; scale: sqrt | linear
 ```
+
+**Sankey mode.** For flow diagrams where quantities are the point, declare
+`diagram: sankey:` and give every node a `population:` — its size *as data*,
+in the same unit as the edge weights:
+
+```yaml
+diagram:
+  sankey: {unit: 12}        # px per item; omit unit to auto-scale (~160px max)
+nodes:
+  $applied:   {population: 7}
+  $interview: {population: 3}
+edges:
+  - {from: $applied, to: $interview, weight: 3}
+```
+
+Rendering then works differently: node height is exactly `population × unit`
+(not measured from content — the box *is* the bar, so style labels outside
+via CSS), band widths are exactly `weight × unit` (`edgeWidth:` is ignored),
+bands tile node sides contiguously so incoming flows sum to precisely the
+node's height when the data conserves, and arrowheads are dropped. A node
+without a numeric population keeps its measured size and logs a console
+warning. `examples/csv_to_sankey.py` generates all of this — populations,
+weights, strata colors, bar styling — from a CSV of items progressing
+through boolean stages.
 
 **Registering new relationship kinds.** `relations:` extends that table per
 diagram, no code required. Because references self-mark, a relation declares

@@ -38,6 +38,12 @@ window.IOFlow = window.IOFlow || {};
     if (cfg.spacing != null) o["elk.spacing.nodeNode"] = String(cfg.spacing);
     if (cfg.layerSpacing != null)
       o["elk.layered.spacing.nodeNodeBetweenLayers"] = String(cfg.layerSpacing);
+    // Nodes may declare a `tier:` (integer column, YAML data): every node
+    // sharing a tier renders in the same layer -- an invisible grouping
+    // tier, e.g. all sankey sources in one column. Activation is global.
+    if (graph.nodes.some((n) => typeof (n.data || {}).tier === "number")) {
+      o["elk.partitioning.activate"] = "true";
+    }
     Object.assign(o, cfg.elk || {});
     return o;
   }
@@ -74,6 +80,14 @@ window.IOFlow = window.IOFlow || {};
       // Round up to avoid sub-pixel clipping of measured content.
       out.width = Math.ceil(r.width);
       out.height = Math.ceil(r.height);
+    }
+    // tier: pins the node into that ELK partition (activated in
+    // rootOptionsFor when any node declares one).
+    const tier = (node.data || {}).tier;
+    if (typeof tier === "number") {
+      out.layoutOptions = Object.assign(out.layoutOptions || {}, {
+        "elk.partitioning.partition": String(Math.round(tier)),
+      });
     }
     // Feed a saved position as a placement hint (used with interactive mode on
     // a topology change; ignored gracefully otherwise).

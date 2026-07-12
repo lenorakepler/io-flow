@@ -1,0 +1,8 @@
+Source,Type,Fit,Email Back,HR Interview,In-Person Interview,Offer
+LinkedIn,Industry,4,TRUE,TRUE,TRUE,TRUE
+Referral,Industry,3,TRUE,FALSE,,
+LinkedIn,Non-Profit,5,TRUE,FALSE,,
+LinkedIn,Non-Profit,2,TRUE,FALSE,,
+LinkedIn,Non-Profit,3,TRUE,TRUE,FALSE,
+LinkedIn,Non-Profit,3,TRUE,TRUE,TRUE,FALSE
+LinkedIn,Non-Profit,3,FALSE,,,
