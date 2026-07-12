@@ -92,6 +92,7 @@ window.IOFlow = window.IOFlow || {};
 
     showSidebar(state, id);
     if (IOF.a11y) IOF.a11y.onSelect(state, id);
+    if (IOF.anchors) IOF.anchors.refresh(state);
   }
 
   function clear(state) {
@@ -101,6 +102,7 @@ window.IOFlow = window.IOFlow || {};
     state.edgeEls.forEach(({ el }) => el.classList.remove("dimmed"));
     hideSidebar();
     if (hadSelection && IOF.a11y) IOF.a11y.onClear();
+    if (IOF.anchors) IOF.anchors.refresh(state);
   }
 
   // ---- Sidebar ---------------------------------------------------------------

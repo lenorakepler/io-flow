@@ -227,6 +227,29 @@ html, body {
   border-radius: 8px;
 }
 
+/* ---- Anchor-edit handles (select a node to show them) ----------------------- */
+/* One per incident edge endpoint; click cycles auto/right/bottom/left/top.
+ * Pinned (non-auto) endpoints fill in. Positioned by anchors.js. */
+.anchor-layer {
+  position: absolute;
+  top: 0;
+  left: 0;
+}
+.anchor-handle {
+  position: absolute;
+  width: 11px;
+  height: 11px;
+  padding: 0;
+  transform: translate(-50%, -50%);
+  border: 2px solid var(--edge);
+  border-radius: 50%;
+  background: #fff;
+  cursor: pointer;
+  z-index: 3;
+}
+.anchor-handle:hover { border-color: var(--file); }
+.anchor-handle--pinned { background: var(--edge); }
+
 /* ---- Resize handle (compounds only) ----------------------------------------- */
 .node__resize {
   position: absolute;

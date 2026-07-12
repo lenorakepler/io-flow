@@ -75,13 +75,18 @@ window.IOFlow = window.IOFlow || {};
     });
     btn.disabled = true;
     btn.textContent = "Saving…";
+    const payload = { positions };
+    if (newEdges.length) payload.new_edges = newEdges;
+    // In-browser anchor overrides (anchors.js) persist in the layout block;
+    // send the full map every save -- the block is regenerated wholesale.
+    if (state.anchorOverrides && Object.keys(state.anchorOverrides).length) {
+      payload.anchors = state.anchorOverrides;
+    }
     try {
       const r = await fetch("/save", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(
-          newEdges.length ? { positions, new_edges: newEdges } : { positions }
-        ),
+        body: JSON.stringify(payload),
       });
       if (!r.ok) throw new Error("HTTP " + r.status);
       if (state.pendingEdges) state.pendingEdges.length = 0;

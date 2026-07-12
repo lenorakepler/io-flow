@@ -218,6 +218,16 @@ spread wide in the layer below their base would otherwise flip to sideways
 routing; the relation-level anchor keeps every inheritance edge vertical
 (see [`examples/anchors.yaml`](examples/anchors.yaml)).
 
+Anchors are also editable in the browser: select a node and a small round
+handle appears at each incident edge endpoint — click it to cycle that
+endpoint through auto → right → bottom → left → top (auto = whatever the
+YAML declares). Overrides layer over declared anchors exactly like saved
+positions layer over ELK, and Save persists them in the machine-owned
+`layout:` block (under `_anchors:`, keyed `src>tgt[:type]` — parallel
+same-type edges between one pair share an override), so hand-authored
+YAML is never rewritten. Without a save server the handles still work;
+unsaved cycles are lost on reload, same as drags.
+
 **Registering new relationship kinds.** `relations:` extends that table per
 diagram, no code required. Because references self-mark, a relation declares
 only its direction:

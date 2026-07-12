@@ -94,6 +94,50 @@ def test_annotate_restore_when_hash_matches(yaml_copy):
     assert fresh["_layout"]["positions"]["file1"] == [1.0, 2.0]
 
 
+def test_anchor_overrides_round_trip(yaml_copy):
+    graph = parse_file(yaml_copy)
+    # preflight -> report (calls) is a real edge in the example.
+    key = "preflight>report:calls"
+    layout_store.merge_positions(
+        yaml_copy, graph, {"file1": [1, 2]}, anchors={key: {"from": "bottom", "to": "top"}}
+    )
+
+    text = yaml_copy.read_text(encoding="utf-8")
+    assert "_anchors:" in text
+
+    saved = layout_store.read_layout(yaml_copy)
+    assert saved["anchors"][key] == {"from": "bottom", "to": "top"}
+
+    fresh = parse_file(yaml_copy)
+    layout_store.annotate_graph(fresh, yaml_copy)
+    assert fresh["_layout"]["anchors"][key] == {"from": "bottom", "to": "top"}
+
+    # Comments survive an anchor-bearing save too.
+    for comment in _original_comment_lines():
+        assert comment in text, f"comment lost: {comment!r}"
+
+
+def test_anchor_overrides_sanitized_and_stale_dropped(yaml_copy):
+    graph = parse_file(yaml_copy)
+    layout_store.merge_positions(
+        yaml_copy,
+        graph,
+        {"file1": [1, 2]},
+        anchors={
+            "ghost>nowhere": {"from": "left"},  # no such edge: dropped
+            "preflight>report:calls": {"from": "middle", "to": "top"},  # bad side dropped
+            "do_run>preflight:calls": {"sideways": "left"},  # no valid ends: dropped
+        },
+    )
+    saved = layout_store.read_layout(yaml_copy)
+    assert saved["anchors"] == {"preflight>report:calls": {"to": "top"}}
+
+
+def test_edge_key_includes_type_when_present():
+    assert layout_store.edge_key({"source": "a", "target": "b"}) == "a>b"
+    assert layout_store.edge_key({"source": "a", "target": "b", "type": "calls"}) == "a>b:calls"
+
+
 def test_annotate_elk_with_notice_when_topology_changes(yaml_copy):
     graph = parse_file(yaml_copy)
     layout_store.merge_positions(yaml_copy, graph, {"file1": [1, 2]})

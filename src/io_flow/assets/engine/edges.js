@@ -290,6 +290,7 @@ window.IOFlow = window.IOFlow || {};
   }
 
   function applyGeometry(state, eps) {
+    state.edgeGeom = eps; // latest resolved geometry (anchors.js reads it)
     state.edgeEls.forEach((rec, i) => {
       const ep = eps[i];
       rec.el.style.display = ep.hidden ? "none" : "";
@@ -302,6 +303,9 @@ window.IOFlow = window.IOFlow || {};
         rec.label.setAttribute("y", r.mid.y);
       }
     });
+    // Anchor-edit handles sit on the endpoints; keep them glued through
+    // drags and re-routes.
+    if (IOF.anchors && IOF.anchors.refresh) IOF.anchors.refresh(state);
   }
 
   function isAncestor(state, ancestor, id) {

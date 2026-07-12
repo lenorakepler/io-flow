@@ -30,6 +30,7 @@ SCRIPT_MANIFEST = [
     "engine/resize.js",
     "engine/save.js",
     "engine/connect.js",
+    "engine/anchors.js",
     "engine/live.js",
     "engine/collapse.js",
     "engine/ui.js",

@@ -52,8 +52,37 @@ def _num(v: Any) -> Any:
     return int(f) if f.is_integer() else round(f, 1)
 
 
+# Box faces an in-browser anchor override may pin an edge endpoint to
+# (mirrors parser.ANCHOR_SIDES; kept local so this module stays standalone).
+_SIDES = ("left", "right", "top", "bottom")
+
+
+def edge_key(edge: dict[str, Any]) -> str:
+    """Stable identity of an edge for anchor overrides: ``src>tgt[:type]``.
+
+    Parallel same-type edges between one pair share a key (documented v1
+    limitation); the key deliberately excludes label/weight so re-labeling
+    an edge keeps its override.
+    """
+    key = f"{edge['source']}>{edge['target']}"
+    return f"{key}:{edge['type']}" if edge.get("type") else key
+
+
+def _clean_anchor(value: Any) -> dict[str, str] | None:
+    """Sanitize one override to ``{from?: side, to?: side}`` or None."""
+    if not isinstance(value, dict):
+        return None
+    out = {
+        end: str(side)
+        for end, side in value.items()
+        if end in ("from", "to") and str(side) in _SIDES
+    }
+    return out or None
+
+
 def read_layout(path: str | Path) -> dict[str, Any] | None:
-    """Return ``{'hash': str|None, 'positions': {id: [x, y]}}`` or ``None``."""
+    """Return ``{'hash', 'positions': {id: [x, y]}, 'anchors': {key: {...}}}``
+    or ``None``."""
     path = Path(path)
     if not path.exists():
         return None
@@ -65,10 +94,18 @@ def read_layout(path: str | Path) -> dict[str, Any] | None:
     if not isinstance(lay, dict):
         return None
     positions: dict[str, list[float]] = {}
+    anchors: dict[str, dict[str, str]] = {}
     hash_ = None
     for key, value in lay.items():
         if key == "_topology":
             hash_ = str(value)
+            continue
+        if key == "_anchors":
+            # In-browser anchor overrides: {edge_key: {from?: side, to?: side}}.
+            for ekey, spec in (value or {}).items() if isinstance(value, dict) else []:
+                cleaned = _clean_anchor(spec)
+                if cleaned:
+                    anchors[str(ekey)] = cleaned
             continue
         try:
             nums = [float(v) for v in list(value)[:4]]
@@ -78,7 +115,7 @@ def read_layout(path: str | Path) -> dict[str, Any] | None:
             continue
         # [x, y] for leaves, [x, y, w, h] for resized compounds.
         positions[str(key)] = nums
-    return {"hash": hash_, "positions": positions}
+    return {"hash": hash_, "positions": positions, "anchors": anchors}
 
 
 def annotate_graph(graph: dict[str, Any], path: str | Path) -> dict[str, Any]:
@@ -86,8 +123,18 @@ def annotate_graph(graph: dict[str, Any], path: str | Path) -> dict[str, Any]:
     saved = read_layout(path)
     current = topology_hash(graph)
 
+    # Anchor overrides are appearance, not topology: deliver them whenever a
+    # layout block exists, in every mode (edges that vanished simply never
+    # match a key in the viewer).
+    anchors = saved.get("anchors", {}) if saved else {}
+
     if saved and saved.get("hash") == current:
-        graph["_layout"] = {"mode": "restore", "positions": saved["positions"], "notice": None}
+        graph["_layout"] = {
+            "mode": "restore",
+            "positions": saved["positions"],
+            "anchors": anchors,
+            "notice": None,
+        }
     elif saved:
         saved_ids = set(saved["positions"].keys())
         current_ids = {n["id"] for n in graph["nodes"]}
@@ -100,18 +147,30 @@ def annotate_graph(graph: dict[str, Any], path: str | Path) -> dict[str, Any]:
             parts.append(f"{removed} node{'s' if removed != 1 else ''} removed")
         detail = ", ".join(parts) if parts else "edges changed"
         notice = f"Topology changed ({detail}); saved layout approximated."
-        graph["_layout"] = {"mode": "elk", "positions": saved["positions"], "notice": notice}
+        graph["_layout"] = {
+            "mode": "elk",
+            "positions": saved["positions"],
+            "anchors": anchors,
+            "notice": notice,
+        }
     else:
-        graph["_layout"] = {"mode": "elk", "positions": {}, "notice": None}
+        graph["_layout"] = {"mode": "elk", "positions": {}, "anchors": {}, "notice": None}
     return graph
 
 
 def merge_positions(
-    path: str | Path, graph: dict[str, Any], positions: dict[str, Any]
+    path: str | Path,
+    graph: dict[str, Any],
+    positions: dict[str, Any],
+    anchors: dict[str, Any] | None = None,
 ) -> None:
     """Merge ``{id: [x, y]}`` into the YAML's ``layout:`` block, in place.
 
-    Preserves every existing comment (verified in tests, not by eye).
+    ``anchors`` (optional) are in-browser edge anchor overrides,
+    ``{edge_key: {from?: side, to?: side}}``, stored under ``_anchors``;
+    entries for edges no longer in the graph are dropped, like stale
+    positions. Preserves every existing comment (verified in tests, not by
+    eye).
     """
     path = Path(path)
     yaml = _yaml()
@@ -128,6 +187,17 @@ def merge_positions(
         lay.clear()  # regenerate contents; the block itself is machine-owned
 
     lay["_topology"] = topology_hash(graph)
+    if anchors:
+        live_keys = {edge_key(e) for e in graph["edges"]}
+        cleaned = CommentedMap()
+        for ekey, spec in anchors.items():
+            spec = _clean_anchor(spec)
+            if spec and str(ekey) in live_keys:
+                entry = CommentedMap(spec)
+                entry.fa.set_flow_style()
+                cleaned[str(ekey)] = entry
+        if cleaned:
+            lay["_anchors"] = cleaned
     for node in graph["nodes"]:
         p = positions.get(node["id"])
         # Silently ignore positions for ids not in the graph (stale client

@@ -102,12 +102,14 @@ window.IOFlow = window.IOFlow || {};
     }
     applyPositions(state, laid);
 
-    // 4. Edges.
+    // 4. Edges. Saved in-browser anchor overrides (layout: block `_anchors:`)
+    // merge into edge.anchor first, layering over any YAML-declared anchors.
+    if (IOF.anchors) IOF.anchors.apply(graph);
     IOF.edges.renderAll(state);
 
     // 5. Optional interaction modules.
     IOF.state = state;
-    [IOF.pan, IOF.dim, IOF.drag, IOF.resize, IOF.save, IOF.connect, IOF.live, IOF.collapse, IOF.ui, IOF.a11y].forEach((mod) => {
+    [IOF.pan, IOF.dim, IOF.drag, IOF.resize, IOF.save, IOF.connect, IOF.live, IOF.collapse, IOF.ui, IOF.a11y, IOF.anchors].forEach((mod) => {
       if (mod && typeof mod.init === "function") mod.init(state);
     });
 
