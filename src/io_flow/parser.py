@@ -116,21 +116,63 @@ EDGE_KEYS: dict[str, str] = {
     "returns": "out",
 }
 
+# Box faces an edge endpoint may be pinned to (``anchor:`` blocks).
+ANCHOR_SIDES = ("left", "right", "top", "bottom")
 
-def _edge_keys_for(data: dict[str, Any]) -> dict[str, str]:
+
+def _anchor_spec(value: Any, where: str) -> dict[str, str]:
+    """Validate ``anchor: {from: side, to: side}`` (both ends optional).
+
+    ``from``/``to`` name the *rendered edge's* source and target endpoint,
+    matching the keys of explicit edges; sides are box faces. An undeclared
+    end keeps the viewer's automatic (dominant-axis) choice.
+    """
+    if not isinstance(value, dict):
+        raise ValueError(
+            f"{where}: anchor must be a mapping like {{from: bottom, to: top}}"
+        )
+    unknown = set(value) - {"from", "to"}
+    if unknown:
+        raise ValueError(
+            f"{where}: unknown anchor key(s) {', '.join(sorted(map(str, unknown)))}; "
+            f"expected 'from' and/or 'to'"
+        )
+    out: dict[str, str] = {}
+    for end in ("from", "to"):
+        side = value.get(end)
+        if side is None:
+            continue
+        side = str(side)
+        if side not in ANCHOR_SIDES:
+            raise ValueError(
+                f"{where}: anchor {end} must be one of {', '.join(ANCHOR_SIDES)}, "
+                f"got {side!r}"
+            )
+        out[end] = side
+    if not out:
+        raise ValueError(f"{where}: anchor declares neither 'from' nor 'to'")
+    return out
+
+
+def _edge_keys_for(data: dict[str, Any]) -> tuple[dict[str, str], dict[str, dict[str, str]]]:
     """Built-in EDGE_KEYS plus any registered in the document's ``relations:``.
 
     A diagram can declare new relationship kinds without touching this module::
 
         relations:
-          emits:  {direction: out}
-          reads:  {direction: in}
+          emits:    {direction: out}
+          reads:    {direction: in}
+          inherits: {direction: out, anchor: {from: top, to: bottom}}
 
     Each registered name becomes usable on any node exactly like ``calls:``,
     tags its edges with ``type: <name>`` (so ``edge--<name>`` is stylable from
-    CSS), and follows the same resolve/warn rules.
+    CSS), and follows the same resolve/warn rules. An ``anchor:`` on the
+    relation is stamped onto every edge it derives (re-registering a built-in
+    name works, so ``calls`` can carry a default anchor too). Returns
+    ``(name -> direction, name -> anchor spec)``.
     """
     keys = dict(EDGE_KEYS)
+    anchors: dict[str, dict[str, str]] = {}
     for name, spec in (data.get("relations", {}) or {}).items():
         spec = spec or {}
         if "ref" in spec:
@@ -144,7 +186,9 @@ def _edge_keys_for(data: dict[str, Any]) -> dict[str, str]:
                 f"relations.{name}: direction must be 'in' or 'out', got {direction!r}"
             )
         keys[str(name)] = direction
-    return keys
+        if spec.get("anchor") is not None:
+            anchors[str(name)] = _anchor_spec(spec["anchor"], f"relations.{name}")
+    return keys, anchors
 
 
 def parse_file(path: str | Path) -> dict[str, Any]:
@@ -169,7 +213,7 @@ def parse(data: dict[str, Any]) -> dict[str, Any]:
     nodes: list[dict[str, Any]] = []
     seen: set[str] = set()
 
-    edge_keys = _edge_keys_for(data)
+    edge_keys, relation_anchors = _edge_keys_for(data)
 
     defaults = data.get("defaults", {}) or {}
     if not isinstance(defaults, dict):
@@ -310,6 +354,8 @@ def parse(data: dict[str, Any]) -> dict[str, Any]:
             edge["weight"] = annotation
         elif isinstance(annotation, str) and annotation:
             edge["label"] = annotation
+        if edge_type in relation_anchors:
+            edge["anchor"] = relation_anchors[edge_type]
         edges.append(edge)
 
     for owner, edge_type, text in literals:
@@ -374,6 +420,13 @@ def parse(data: dict[str, Any]) -> dict[str, Any]:
                     f"explicit edge {spec!r}: weight must be a number, got {weight!r}"
                 )
             edge["weight"] = weight
+        # Endpoint pinning: an explicit anchor wins; otherwise a typed edge
+        # inherits its relation's default anchor, so explicit `inherits`
+        # entries render like derived ones.
+        if spec.get("anchor") is not None:
+            edge["anchor"] = _anchor_spec(spec["anchor"], f"explicit edge {spec!r}")
+        elif edge.get("type") in relation_anchors:
+            edge["anchor"] = relation_anchors[edge["type"]]
         edges.append(edge)
 
     # --- Pass 2c: dedupe --------------------------------------------------------

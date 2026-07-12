@@ -192,6 +192,32 @@ normalize); delete the block to get freshly stacked classes. Non-goal:
 `sankey:` and `classLayout:` together is untested. See
 [`examples/class_layout.yaml`](examples/class_layout.yaml).
 
+**Edge anchors.** By default each edge endpoint picks its box face
+automatically (dominant axis between the two boxes: the source exits toward
+the target, the target is entered from the opposite face). `anchor:` pins
+an endpoint to a named face — `left` / `right` / `top` / `bottom` — at any
+of three levels, most specific wins:
+
+```yaml
+relations:
+  inherits: {direction: out, anchor: {from: top, to: bottom}}  # every inherits edge
+nodes:
+  $logger: {anchors: {in: left}}                # all edges entering this node
+edges:
+  - {from: $render, to: $draw, type: calls, anchor: {from: right, to: left}}
+```
+
+`from`/`to` name the rendered edge's source and target (so for an `in`
+relation like `args`, `from` is the referenced node). Re-registering a
+built-in under `relations:` works, so `calls` can carry a default anchor
+too. Pinned and automatic endpoints share the same per-face stacking, and
+the two ends may sit on unrelated faces (exit bottom, enter left) — the
+route bends through each endpoint's face normal. Undeclared diagrams render
+pixel-identically. The classic use is UML inheritance: derived classes
+spread wide in the layer below their base would otherwise flip to sideways
+routing; the relation-level anchor keeps every inheritance edge vertical
+(see [`examples/anchors.yaml`](examples/anchors.yaml)).
+
 **Registering new relationship kinds.** `relations:` extends that table per
 diagram, no code required. Because references self-mark, a relation declares
 only its direction:

@@ -675,6 +675,55 @@ def test_relations_ref_axis_is_obsolete():
         parse({"relations": {"reads": {"direction": "in", "ref": "value"}}, "nodes": {}})
 
 
+def test_explicit_edge_anchor_passes_through():
+    graph = parse(
+        {
+            "nodes": {"$a": {}, "$b": {}},
+            "edges": [{"from": "$a", "to": "$b", "anchor": {"from": "bottom", "to": "top"}}],
+        }
+    )
+    assert graph["edges"][0]["anchor"] == {"from": "bottom", "to": "top"}
+
+
+def test_relation_anchor_stamps_derived_and_explicit_edges():
+    graph = parse(
+        {
+            "relations": {
+                "inherits": {"direction": "out", "anchor": {"from": "top", "to": "bottom"}}
+            },
+            "nodes": {
+                "$base": {},
+                "$derived": {"inherits": {"$base": ""}},
+                "$other": {},
+            },
+            # A typed explicit edge inherits the relation's default anchor...
+            "edges": [
+                {"from": "$other", "to": "$base", "type": "inherits"},
+                # ...unless it declares its own.
+                {"from": "$other", "to": "$derived", "type": "inherits", "anchor": {"to": "left"}},
+            ],
+        }
+    )
+    anchors = {(e["source"], e["target"]): e.get("anchor") for e in graph["edges"]}
+    assert anchors[("derived", "base")] == {"from": "top", "to": "bottom"}
+    assert anchors[("other", "base")] == {"from": "top", "to": "bottom"}
+    assert anchors[("other", "derived")] == {"to": "left"}
+
+
+def test_anchor_validation_is_loud():
+    with pytest.raises(ValueError, match="anchor"):
+        parse(
+            {
+                "nodes": {"$a": {}, "$b": {}},
+                "edges": [{"from": "$a", "to": "$b", "anchor": {"from": "middle"}}],
+            }
+        )
+    with pytest.raises(ValueError, match="anchor"):
+        parse({"relations": {"x": {"anchor": {"sideways": "left"}}}, "nodes": {}})
+    with pytest.raises(ValueError, match="anchor"):
+        parse({"relations": {"x": {"anchor": {}}}, "nodes": {}})
+
+
 def test_default_type_falls_back_to_node():
     graph = parse({"nodes": {"$plain": {}}})
     assert _node(graph, "plain")["type"] == "node"

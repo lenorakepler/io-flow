@@ -1,0 +1,62 @@
+# Edge anchor pinning example. By default an endpoint's face is chosen
+# automatically (dominant axis between the two boxes); `anchor:` pins it to
+# a named face: left / right / top / bottom.
+#
+# Three declaration levels (per-edge > per-relation > per-node > automatic):
+#   - relations: inherits: {..., anchor: {from: top, to: bottom}}
+#       stamped on every derived `inherits:` edge -- the UML reading, where
+#       inheritance always runs vertically. Without it, the outer derived
+#       classes below are displaced mostly horizontally from Shape, so the
+#       dominant-axis rule would route their edges out the boxes' sides.
+#   - per-edge anchor: {from, to} on an explicit edge (render -> circle_area).
+#   - per-node anchors: {in, out} as free node data (see $logger).
+#
+# `from`/`to` name the rendered edge's source and target endpoint.
+
+defaults:
+  class: method
+
+diagram:
+  classLayout:
+  direction: UP # derived classes sit below their base, edges point up
+
+relations:
+  inherits: {direction: out, anchor: {from: top, to: bottom}}
+
+nodes:
+  $Shape:
+    type: class
+    loc: src/shapes.py
+    $area: {}
+    $perimeter: {}
+
+  $Circle:
+    type: class
+    inherits: {$Shape: ""}
+    $circle_area: {label: area}
+
+  $Square:
+    type: class
+    inherits: {$Shape: ""}
+    $square_area: {label: area}
+
+  $Triangle:
+    type: class
+    inherits: {$Shape: ""}
+    $triangle_area: {label: area}
+
+  $logger:
+    type: file
+    # Every edge touching this node enters on its left face.
+    anchors: {in: left}
+
+  $render:
+    type: function
+    loc: src/render.py
+    calls:
+      $logger: ""
+
+# Per-edge form: this call leaves render's right face and enters the
+# member's left face, whatever the layout does.
+edges:
+  - {from: $render, to: $circle_area, type: calls, anchor: {from: right, to: left}}

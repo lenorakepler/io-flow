@@ -39,6 +39,19 @@ window.IOFlow = window.IOFlow || {};
   const PAD = 8; // stack inset from the side's corners
   const BASE_BAND = 2; // nominal band for unweighted edges (~CSS stroke width)
 
+  // Declared anchor faces: box face name -> {axis, sign}. "h" runs east/west
+  // (sign +1 = right face), "v" runs north/south (sign +1 = bottom face) --
+  // the same encoding the automatic dominant-axis rule produces, so declared
+  // and automatic endpoints share stacks on a face. Edges carry
+  // `anchor: {from, to}` (per-edge or stamped from a relation by the
+  // parser); nodes may declare `anchors: {in, out}` as free data.
+  const SIDES = {
+    left: { axis: "h", sign: -1 },
+    right: { axis: "h", sign: 1 },
+    top: { axis: "v", sign: -1 },
+    bottom: { axis: "v", sign: 1 },
+  };
+
   // Sankey mode: `diagram: sankey:` declares that node populations and edge
   // weights are the same data unit and must render exactly proportionally --
   // node height = population * unit (applied by viewer.js), band width =
@@ -140,6 +153,17 @@ window.IOFlow = window.IOFlow || {};
       (state.graph.diagram || {}).direction || "RIGHT"
     ).toUpperCase();
     const sankeyHoriz = layoutDir !== "DOWN" && layoutDir !== "UP";
+    // Node-level anchor defaults (`anchors: {in, out}`, free node data),
+    // resolved against the *visible* node -- the box actually anchored.
+    const nodeById = {};
+    state.graph.nodes.forEach((n) => {
+      nodeById[n.id] = n;
+    });
+    const nodeSide = (id, key) => {
+      const n = nodeById[id];
+      const a = n && n.data && n.data.anchors;
+      return a ? SIDES[a[key]] : undefined;
+    };
     const eps = state.graph.edges.map((edge) => {
       const sVis = visibleIdOf(state, edge.source);
       const tVis = visibleIdOf(state, edge.target);
@@ -156,6 +180,14 @@ window.IOFlow = window.IOFlow || {};
         : t.y + t.h / 2 >= s.y + s.h / 2
           ? 1
           : -1;
+      // Each endpoint's face: declared per edge > node default > automatic
+      // (dominant axis; source exits toward the target, target is entered
+      // from the opposite face).
+      const anchor = edge.anchor || {};
+      const sFace =
+        SIDES[anchor.from] || nodeSide(sVis, "out") || { axis: horiz ? "h" : "v", sign: dir };
+      const tFace =
+        SIDES[anchor.to] || nodeSide(tVis, "in") || { axis: horiz ? "h" : "v", sign: -dir };
       const width = widthOf(edge);
       return {
         edge,
@@ -163,8 +195,8 @@ window.IOFlow = window.IOFlow || {};
         tVis,
         s,
         t,
-        horiz,
-        dir,
+        sFace,
+        tFace,
         width,
         band: width != null ? width : BASE_BAND,
         // Both endpoints inside the same collapsed compound: the edge is
@@ -176,14 +208,14 @@ window.IOFlow = window.IOFlow || {};
       };
     });
 
-    // Group endpoint usages by (visible node, side). Key sides by axis +
+    // Group endpoint usages by (visible node, face). Keys encode axis +
     // sign so "exits west" and "enters west" share one stack on that side.
     const groups = {};
+    const faceKey = (face) => face.axis + (face.sign > 0 ? "+" : "-");
     eps.forEach((ep) => {
       if (ep.hidden) return;
-      const axis = ep.horiz ? "h" : "v";
-      const sKey = ep.sVis + "|" + axis + (ep.dir > 0 ? "+" : "-");
-      const tKey = ep.tVis + "|" + axis + (ep.dir > 0 ? "-" : "+");
+      const sKey = ep.sVis + "|" + faceKey(ep.sFace);
+      const tKey = ep.tVis + "|" + faceKey(ep.tFace);
       (groups[sKey] = groups[sKey] || []).push({ ep, end: "s" });
       (groups[tKey] = groups[tKey] || []).push({ ep, end: "t" });
     });
@@ -191,13 +223,14 @@ window.IOFlow = window.IOFlow || {};
     Object.values(groups).forEach((entries) => {
       entries.forEach((en) => {
         en.box = en.end === "s" ? en.ep.s : en.ep.t;
+        en.face = en.end === "s" ? en.ep.sFace : en.ep.tFace;
         const other = en.end === "s" ? en.ep.t : en.ep.s;
-        en.sort = en.ep.horiz ? other.y + other.h / 2 : other.x + other.w / 2;
+        en.sort = en.face.axis === "h" ? other.y + other.h / 2 : other.x + other.w / 2;
       });
       entries.sort((a, b) => a.sort - b.sort);
 
       const box = entries[0].box;
-      const horiz = entries[0].ep.horiz; // uniform per group (key includes axis)
+      const horiz = entries[0].face.axis === "h"; // uniform per group (key includes axis)
       const side = (horiz ? box.h : box.w) - 2 * pad;
       const total =
         entries.reduce((acc, en) => acc + en.ep.band, 0) + gap * (entries.length - 1);
@@ -212,9 +245,7 @@ window.IOFlow = window.IOFlow || {};
       entries.forEach((en) => {
         const mid = cursor + (en.ep.band * scale) / 2;
         cursor += (en.ep.band + gap) * scale;
-        // Which face of the box: the source exits toward dir, the target is
-        // entered from the opposite face.
-        const plusFace = en.end === "s" ? en.ep.dir > 0 : en.ep.dir < 0;
+        const plusFace = en.face.sign > 0;
         const p = horiz
           ? { x: plusFace ? en.box.x + en.box.w : en.box.x, y: mid }
           : { x: mid, y: plusFace ? en.box.y + en.box.h : en.box.y };
@@ -226,27 +257,28 @@ window.IOFlow = window.IOFlow || {};
     return eps;
   }
 
-  // Bezier path + label midpoint from the stacked anchors; control points
-  // extend along the routing axis.
+  // Bezier path + label midpoint from the stacked anchors; each control
+  // point extends along its own endpoint's outward face normal, so the two
+  // ends may sit on unrelated faces (anchor: declarations). With automatic
+  // (opposite-face) endpoints this is byte-identical to extending along the
+  // shared routing axis.
   function routeOf(ep) {
     const sx = ep.sAnchor.x;
     const sy = ep.sAnchor.y;
     const tx = ep.tAnchor.x;
     const ty = ep.tAnchor.y;
-    let c1x, c1y, c2x, c2y;
-    if (ep.horiz) {
-      const d = Math.max(40, Math.abs(tx - sx) * 0.4) * ep.dir;
-      c1x = sx + d;
-      c1y = sy;
-      c2x = tx - d;
-      c2y = ty;
-    } else {
-      const d = Math.max(40, Math.abs(ty - sy) * 0.4) * ep.dir;
-      c1x = sx;
-      c1y = sy + d;
-      c2x = tx;
-      c2y = ty - d;
-    }
+    const ctrl = (x, y, face) => {
+      const reach =
+        Math.max(40, (face.axis === "h" ? Math.abs(tx - sx) : Math.abs(ty - sy)) * 0.4) *
+        face.sign;
+      return face.axis === "h" ? { x: x + reach, y } : { x, y: y + reach };
+    };
+    const c1 = ctrl(sx, sy, ep.sFace);
+    const c2 = ctrl(tx, ty, ep.tFace);
+    const c1x = c1.x,
+      c1y = c1.y,
+      c2x = c2.x,
+      c2y = c2.y;
     return {
       d: `M ${sx} ${sy} C ${c1x} ${c1y}, ${c2x} ${c2y}, ${tx} ${ty}`,
       // Cubic bezier at t = 0.5.
