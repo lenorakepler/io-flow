@@ -44,6 +44,11 @@ Rules:
   a phantom edge. An unmarked string that *exactly matches* a node id draws an
   ``UnmarkedReferenceWarning`` (a forgotten ``$`` silently drops an edge
   otherwise). Both sides ``$``-marked is an error.
+* **The unmarked side of a key-side ref annotates the edge by type.** A
+  string is label text (``calls: {$plot: "make figures"}``), a number is a
+  flow weight (``calls: {$plot: 42}``) that the viewer renders as stroke
+  width (see the ``diagram: edgeWidth:`` block). Explicit ``edges:`` entries
+  take an optional numeric ``weight:`` alongside ``type``/``label``.
 * **Explicit ``edges:`` lists may live at top level or inside any node.**
   Inside a node, an omitted ``from``/``to`` defaults to the declaring node.
   Placement is organization only and never changes meaning: references are
@@ -175,8 +180,10 @@ def parse(data: dict[str, Any]) -> dict[str, Any]:
         return str(defaults.get(key, DEFAULT_TYPE))
 
     # Reference sites recorded during the walk and resolved in pass 2.
-    # Each entry: (owner_node_id, edge_type, ref, label, context_key)
-    # where `context_key` only serves warning messages for value-side refs.
+    # Each entry: (owner_node_id, edge_type, ref, annotation, context_key)
+    # where `annotation` is the unmarked side of a key-side ref (str = label,
+    # number = weight) and `context_key` only serves warning messages for
+    # value-side refs.
     sites: list[tuple[str, str, str, Any, str | None]] = []
     # Unmarked strings in relation blocks, checked in pass 2 against node ids
     # (a forgotten $ silently drops an edge; make that loud).
@@ -205,7 +212,8 @@ def parse(data: dict[str, Any]) -> dict[str, Any]:
                         f"sides are $-marked; exactly one side may be the reference"
                     )
                 if key_ref:
-                    # Unmarked value is optional edge-label text ("" = none).
+                    # Unmarked value annotates the edge: a string is label
+                    # text ("" = none), a number is a flow weight.
                     sites.append((node_id, edge_type, _strip(key), value, None))
                 elif value_ref:
                     # Unmarked key is a name for the connection (arg name).
@@ -288,16 +296,20 @@ def parse(data: dict[str, Any]) -> dict[str, Any]:
             stacklevel=3,
         )
 
-    for owner, edge_type, ref, label, context_key in sites:
+    for owner, edge_type, ref, annotation, context_key in sites:
         if ref not in node_ids:
             where = f"for {owner}.{context_key}" if context_key else f"({edge_type}) from {owner}"
             _warn_unresolved(ref, where)
             continue
         direction = edge_keys[edge_type]
         source, target = (ref, owner) if direction == "in" else (owner, ref)
-        edge: dict[str, str] = {"source": source, "target": target, "type": edge_type}
-        if isinstance(label, str) and label:
-            edge["label"] = label
+        edge: dict[str, Any] = {"source": source, "target": target, "type": edge_type}
+        if isinstance(annotation, bool):
+            pass  # a bool is a literal default value, not a label or weight
+        elif isinstance(annotation, (int, float)):
+            edge["weight"] = annotation
+        elif isinstance(annotation, str) and annotation:
+            edge["label"] = annotation
         edges.append(edge)
 
     for owner, edge_type, text in literals:
@@ -355,6 +367,13 @@ def parse(data: dict[str, Any]) -> dict[str, Any]:
         label = spec.get("label")
         if isinstance(label, str) and label:
             edge["label"] = label
+        weight = spec.get("weight")
+        if weight is not None:
+            if isinstance(weight, bool) or not isinstance(weight, (int, float)):
+                raise ValueError(
+                    f"explicit edge {spec!r}: weight must be a number, got {weight!r}"
+                )
+            edge["weight"] = weight
         edges.append(edge)
 
     # --- Pass 2c: dedupe --------------------------------------------------------
@@ -364,7 +383,13 @@ def parse(data: dict[str, Any]) -> dict[str, Any]:
     unique: list[dict[str, str]] = []
     seen_edges: set[tuple] = set()
     for edge in edges:
-        key = (edge["source"], edge["target"], edge.get("type"), edge.get("label"))
+        key = (
+            edge["source"],
+            edge["target"],
+            edge.get("type"),
+            edge.get("label"),
+            edge.get("weight"),
+        )
         if key in seen_edges:
             continue
         seen_edges.add(key)

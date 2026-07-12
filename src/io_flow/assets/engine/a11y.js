@@ -60,10 +60,12 @@ window.IOFlow = window.IOFlow || {};
     return n ? (n.label != null ? n.label : n.id) : id;
   };
 
-  // "Config.from_yaml (calls: load config)" — the endpoint plus how/why.
+  // "from_yaml (calls: load config)" — the endpoint plus how/why. A numeric
+  // weight (drawn as stroke width) is spoken too: "(calls, weight 42)".
   function endpointText(state, id, edge) {
     let tag = edge.type || "";
     if (edge.label) tag += (tag ? ": " : "") + edge.label;
+    if (typeof edge.weight === "number") tag += (tag ? ", " : "") + "weight " + edge.weight;
     return nameOf(state, id) + (tag ? ` (${tag})` : "");
   }
 

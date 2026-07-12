@@ -12,5 +12,6 @@ wheels/
 # macOS
 .DS_Store
 
-# io-flow build artifacts (root-level generated diagrams)
+# io-flow build artifacts (generated diagrams)
 /*.html
+examples/*.html

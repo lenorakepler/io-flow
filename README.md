@@ -73,8 +73,9 @@ Top-level keys:
 
 - **`title:`** — the HTML page title (defaults to the filename).
 - **`nodes:`** — the node declarations (every key must be a `$name`).
-- **`edges:`** — explicit edges: `- {from: $a, to: $b, type: calls, label: "..."}`.
+- **`edges:`** — explicit edges: `- {from: $a, to: $b, type: calls, label: "...", weight: 42}`.
   `type` is a free tag; every edge's type becomes an `edge--<type>` CSS class.
+  `weight` is an optional flow volume drawn as stroke width (below).
   An `edges:` list may also live inside any node (below).
 - **`relations:`** — register new relationship kinds (below).
 - **`defaults:`** — default types for untyped nodes (below).
@@ -118,6 +119,25 @@ An unresolved `$ref` prints a loud warning listing close candidates; an
 unmarked string that exactly matches a node id warns that a `$` may be missing
 (`io-flow check --strict` turns warnings into a failing exit code).
 
+**Weighted edges (flow volumes).** The unmarked side of a `$`-keyed relation
+entry annotates the edge *by type*: a string is a label, a number is a
+weight. Explicit edges take a numeric `weight:` alongside `type`/`label`.
+Weighted edges scale their stroke width — proportional to the diagram's
+heaviest flow, sqrt-damped so a 100× volume isn't a 100× line — carry an
+`edge--weighted` class, and use a fixed-size arrowhead. Unweighted edges are
+untouched, so structural wiring and flow volumes mix freely in one diagram
+(see [`examples/weighted_flow.yaml`](examples/weighted_flow.yaml)):
+
+```yaml
+nodes:
+  $parse: {calls: {$validate: 118000}}   # number = weight
+  $validate: {calls: {$dedupe: "check"}} # string = label, as before
+edges:
+  - {from: $validate, to: $quarantine, type: passes, weight: 22000}
+diagram:
+  edgeWidth: {min: 1.5, max: 12, scale: sqrt}  # defaults; scale: sqrt | linear
+```
+
 **Registering new relationship kinds.** `relations:` extends that table per
 diagram, no code required. Because references self-mark, a relation declares
 only its direction:
@@ -151,6 +171,8 @@ diagram:
   algorithm: layered     # any elkjs algorithm (mrtree, force, ...)
   spacing: 40            # node-node spacing
   layerSpacing: 70       # between layers
+  edgeWidth:             # weighted-edge stroke range (see Weighted edges)
+    {min: 1.5, max: 12, scale: sqrt}
   elk:                   # raw ELK options, highest precedence
     elk.aspectRatio: "2"
 ```

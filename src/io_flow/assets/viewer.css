@@ -80,7 +80,11 @@ html, body {
   stroke-width: 1.6;
   transition: opacity 0.18s ease;
 }
-#edges #arrow path { fill: var(--edge); }
+#edges #arrow path,
+#edges #arrow-flow path { fill: var(--edge); }
+/* Weighted edges read better translucent (crossings stay legible) and solid
+ * (per-type dashes turn into bricks at flow widths). */
+#edges .edge--weighted { stroke-opacity: 0.55; stroke-dasharray: none; }
 
 /* Per-type edge styling — every edge carries `edge--<type>` (the YAML edge
  * kind: args / calls / returns / any custom tag). Add rules freely. */

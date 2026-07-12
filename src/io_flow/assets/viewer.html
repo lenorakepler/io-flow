@@ -18,6 +18,13 @@
                     markerWidth="7" markerHeight="7" orient="auto-start-reverse">
               <path d="M0,0 L10,5 L0,10 z"></path>
             </marker>
+            <!-- Weighted edges use a fixed-size head: the default marker
+                 scales with stroke width, comically so on heavy flows. -->
+            <marker id="arrow-flow" viewBox="0 0 10 10" refX="9" refY="5"
+                    markerWidth="12" markerHeight="12" orient="auto-start-reverse"
+                    markerUnits="userSpaceOnUse">
+              <path d="M0,0 L10,5 L0,10 z"></path>
+            </marker>
           </defs>
         </svg>
       </div>

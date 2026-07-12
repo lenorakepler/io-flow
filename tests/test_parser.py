@@ -290,6 +290,53 @@ def test_unresolved_reference_makes_no_edge():
     assert ("a", "report") not in _edge_set(graph)
 
 
+def test_numeric_annotation_is_a_weight_string_is_a_label():
+    """The unmarked side of a key-side ref annotates by type."""
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        graph = parse(
+            {
+                "nodes": {
+                    "$a": {"calls": {"$b": 42, "$c": "named"}},
+                    "$b": {},
+                    "$c": {},
+                }
+            }
+        )
+    edges = {(e["source"], e["target"]): e for e in graph["edges"]}
+    assert edges[("a", "b")]["weight"] == 42
+    assert "label" not in edges[("a", "b")]
+    assert edges[("a", "c")]["label"] == "named"
+    assert "weight" not in edges[("a", "c")]
+
+
+def test_bool_annotation_is_neither_label_nor_weight():
+    graph = parse({"nodes": {"$a": {"calls": {"$b": True}}, "$b": {}}})
+    (edge,) = graph["edges"]
+    assert "weight" not in edge and "label" not in edge
+
+
+def test_explicit_edge_weight_passes_through():
+    graph = parse(
+        {
+            "nodes": {"$a": {}, "$b": {}},
+            "edges": [{"from": "$a", "to": "$b", "type": "passes", "weight": 3.5}],
+        }
+    )
+    (edge,) = graph["edges"]
+    assert edge["weight"] == 3.5
+
+
+def test_explicit_edge_non_numeric_weight_is_error():
+    with pytest.raises(ValueError, match="weight"):
+        parse(
+            {
+                "nodes": {"$a": {}, "$b": {}},
+                "edges": [{"from": "$a", "to": "$b", "weight": "heavy"}],
+            }
+        )
+
+
 def test_derived_edges_carry_their_type():
     with warnings.catch_warnings():
         warnings.simplefilter("error")

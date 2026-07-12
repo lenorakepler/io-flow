@@ -1,0 +1,54 @@
+# Weighted edges: visualize flow volume as stroke width.
+#
+# Two ways to weight an edge:
+#   - In a relation block, the unmarked side of a $-key entry annotates the
+#     edge BY TYPE: a string is a label, a number is a weight.
+#         calls: {$validate: 118000}     # weight
+#         calls: {$validate: "check"}    # label
+#   - Explicit edges take an optional numeric `weight:` alongside type/label.
+#
+# Widths are proportional to the diagram's heaviest flow, sqrt-damped so a
+# 100x volume isn't a 100x line. Tune via `diagram: edgeWidth:` below.
+# Unweighted edges (all the args: references here) keep their normal CSS
+# width, so structural wiring and flow volumes mix freely in one diagram.
+
+title: "nightly ingest — record volumes"
+
+diagram:
+  direction: RIGHT
+  edgeWidth: {min: 1.5, max: 14, scale: sqrt} # px range; scale: sqrt | linear
+
+defaults:
+  group: function
+  _root: function
+
+nodes:
+  $raw_events:
+    type: file
+    value: events.jsonl
+    description: ~120k rows/night
+  $raw_users:
+    type: file
+    value: users.csv
+
+  $ingest:
+    type: group
+    $parse:
+      args: {events: $raw_events}
+      calls: {$validate: 118000}
+    $validate:
+      calls: {$dedupe: 96000}
+    $dedupe: {}
+
+  $enrich:
+    args: {users: $raw_users}
+    calls: {$load_warehouse: 91000}
+
+  $quarantine: {type: file, description: rejected rows}
+  $load_warehouse: {}
+  $warehouse: {type: file, value: analytics.events}
+
+edges:
+  - {from: $dedupe, to: $enrich, type: passes, weight: 91000, label: clean rows}
+  - {from: $validate, to: $quarantine, type: passes, weight: 22000, label: rejects}
+  - {from: $load_warehouse, to: $warehouse, type: returns, weight: 91000}
