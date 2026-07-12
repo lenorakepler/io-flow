@@ -3,11 +3,12 @@
 # $name means node, everywhere:
 # -----------------------------
 #   - A key starting with $ DECLARES a node. Nest $keys inside a node to
-#     declare children; ids are dotted paths ($postprocess > $plot gives
-#     "postprocess.plot"), and labels default to the short name.
+#     declare children. Names are globally unique and ARE the ids -- nesting
+#     only sets the parent, so regrouping never changes a name. Labels
+#     default to the name.
 #   - A $-marked key or string value inside args/calls/returns (or any
-#     relation registered under `relations:`) REFERENCES a node by its full
-#     path. Unmarked strings are always literals and can never create edges.
+#     relation registered under `relations:`) REFERENCES a node by name.
+#     Unmarked strings are always literals and can never create edges.
 #
 # Everything in a node's mapping that is not $-marked and not reserved
 # (type, label, relation names) is free-form data: it shows in the sidebar
@@ -71,7 +72,7 @@ nodes:
     # `calls:` draws an edge from this node to the referenced node. The
     # unmarked side is optional edge-label text ("" for no label).
     calls:
-      $Config.from_yaml: load config
+      $from_yaml: load config
       $preflight: ""
     # `returns:` has the same shape -- edge from this node to the target.
     returns:
@@ -82,20 +83,21 @@ nodes:
   $report:
     type: function
     loc: src/run.py
-    # `label:` overrides the display name while the path id stays the
-    # unique, addressable key -- handy when two nodes would share a name.
+    # `label:` overrides the display name while the name stays the unique,
+    # addressable key -- when two things naturally share a name, pick unique
+    # names (dots are fine: $Config.run) and label them for display.
     label: build_report
 
   # Any node with $children is a compound container (think "steps" or
   # "workflows"); it may also carry args/calls/returns of its own, behaving
-  # like a function. References always use the full path.
+  # like a function. References are plain names wherever the node lives.
   $postprocess:
     type: group
     loc: src/post.py
     $summarize:
       loc: src/post.py
       calls:
-        $postprocess.plot: ""
+        $plot: ""
     $plot:
       loc: src/post.py
 

@@ -13,7 +13,7 @@ and reference::
       $Config:
         type: class
         loc: src/config.py     # <- not reserved, not $-marked: free data
-        $from_yaml:            # <- child node; id "Config.from_yaml"
+        $from_yaml:            # <- child node; id "from_yaml"
           args: {path: $configfile}
 
 The output model is a flat list of nodes (each carrying a ``parent`` pointer so
@@ -26,10 +26,14 @@ the structure is recursive) plus a flat list of edges::
 
 Rules:
 
-* **Ids are paths.** A node's id is its ``$``-stripped names dot-joined from
-  the root (``$postprocess`` > ``$plot`` -> ``postprocess.plot``). References
-  use the full path (``$postprocess.plot``). Names therefore cannot contain
-  ``.``. Labels default to the short (last-segment) name.
+* **Ids are names.** A node's id is its ``$``-stripped name, and names are
+  globally unique -- one flat namespace regardless of nesting. Identity is
+  decoupled from location: regrouping a node never changes its id, so
+  references (and saved layouts) survive reorganization. When two things
+  naturally share a name, pick unique names yourself -- dots carry no
+  structural meaning, so ``$Config.run`` and ``$Runner.run`` are just two
+  names -- and use ``label:`` for the display name. Labels default to the
+  name.
 * **Types are free-form.** ``type:`` maps straight to a viewer template +
   ``.node--<type>`` CSS class; no registration anywhere. Untyped nodes get a
   type from the ``defaults:`` block (parent type -> child type, ``_root`` for
@@ -43,7 +47,8 @@ Rules:
 * **Explicit ``edges:`` lists may live at top level or inside any node.**
   Inside a node, an omitted ``from``/``to`` defaults to the declaring node.
   Placement is organization only and never changes meaning: references are
-  always full paths. (``edges`` is therefore a reserved key in node mappings.)
+  always global names. (``edges`` is therefore a reserved key in node
+  mappings.)
 * **Two-pass.** Every node id is collected first, then references are
   resolved, so forward references work regardless of document order.
 * Unresolved ``$refs`` emit a loud ``UnresolvedReferenceWarning`` listing
@@ -76,7 +81,7 @@ DEFAULT_TYPE = "node"
 
 
 class DuplicateNodeError(ValueError):
-    """Raised when two nodes would share the same path id."""
+    """Raised when two nodes would share the same name (names are global)."""
 
 
 class UnresolvedReferenceWarning(UserWarning):
@@ -213,19 +218,25 @@ def parse(data: dict[str, Any]) -> dict[str, Any]:
                         literals.append((node_id, edge_type, value))
 
     def add_node(name: str, spec: Any, parent_id: str | None, parent_type: str | None) -> None:
-        if not name or "." in name:
+        if not name:
             raise ValueError(
-                f"invalid node name {SIGIL}{name!r}"
+                f"invalid node name {SIGIL!r}"
                 + (" under " + parent_id if parent_id else "")
-                + ": names must be non-empty and cannot contain '.' "
-                "(dots separate path segments in ids)"
+                + ": names must be non-empty"
             )
         spec = spec or {}
         if not isinstance(spec, dict):
             raise ValueError(f"node {SIGIL}{name}: spec must be a mapping, got {spec!r}")
-        node_id = f"{parent_id}.{name}" if parent_id else name
+        # The name IS the id: one flat, global namespace. Nesting sets the
+        # `parent` pointer only, so regrouping never changes identity.
+        node_id = name
         if node_id in seen:
-            raise DuplicateNodeError(f"duplicate node id {node_id!r}")
+            raise DuplicateNodeError(
+                f"duplicate node name {SIGIL}{node_id}: names are global, even "
+                f"inside different parents. Rename one (dots are fine, e.g. "
+                f"{SIGIL}Config.{node_id}) and set 'label: {node_id}' to keep "
+                f"the display name."
+            )
         seen.add(node_id)
 
         node_type = str(spec["type"]) if spec.get("type") is not None else default_type(parent_type)
@@ -245,8 +256,8 @@ def parse(data: dict[str, Any]) -> dict[str, Any]:
                 "id": node_id,
                 "type": node_type,
                 "parent": parent_id,
-                # label defaults to the short name; the path id stays the
-                # unique, addressable key.
+                # label defaults to the name; the name stays the unique,
+                # addressable key.
                 "label": label if label is not None else name,
                 "data": _plain(node_data),
             }
@@ -308,7 +319,7 @@ def parse(data: dict[str, Any]) -> dict[str, Any]:
     # free tag (conventionally a relation name); `label` is optional. The list
     # may live at top level or inside a node, where an omitted from/to
     # defaults to the declaring node. Placement never changes meaning: refs
-    # are always full paths.
+    # are always global names.
     if data.get("edges") is not None:
         record_explicit(None, data["edges"])
     for owner, spec in explicit:

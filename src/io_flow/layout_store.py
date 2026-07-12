@@ -33,8 +33,14 @@ def _yaml() -> YAML:
 
 
 def topology_hash(graph: dict[str, Any]) -> str:
-    """Stable short hash of the node-id set + edge pairs."""
-    ids = sorted(n["id"] for n in graph["nodes"])
+    """Stable short hash of (id, parent) pairs + edge pairs.
+
+    Parentage is part of the hash because saved positions are
+    parent-relative: node ids are flat names that survive regrouping, but a
+    moved node's coordinates are meaningless under its new parent, so a
+    regroup must fall back to ELK-with-hints rather than exact restore.
+    """
+    ids = sorted([n["id"], n.get("parent")] for n in graph["nodes"])
     edges = sorted((e["source"], e["target"]) for e in graph["edges"])
     payload = json.dumps({"nodes": ids, "edges": edges}, sort_keys=True)
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:16]

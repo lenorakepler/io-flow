@@ -7,6 +7,13 @@ nodes with `parent` pointers + flat typed edges), so the viewer, layout store,
 emitter, server, and CLI are untouched either way — switching is a parser +
 examples + docs change only.
 
+> **Update (2026-07-12):** ids are no longer dotted paths. Names are globally
+> unique and are the ids; nesting only sets the `parent` pointer, so
+> regrouping never changes a name (references and saved layouts survive
+> reorganization). Mentions of "path ids" below reflect the design as of
+> 2026-07-08. The `.`-collides-with-path-ids sigil constraint no longer
+> applies — dots in names are legal and meaningless.
+
 ## Why the grammar was redesigned at all
 
 The original grammar used **section headings as types** (`classes:`,

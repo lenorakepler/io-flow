@@ -43,19 +43,19 @@ def test_example_edges_exact():
         graph = parse_file(EXAMPLE)
 
     expected = {
-        ("limitparam", "Config.attributes"),
-        ("configfile", "Config.from_yaml"),
+        ("limitparam", "attributes"),
+        ("configfile", "from_yaml"),
         ("Config", "do_run"),
         ("skippreflight", "do_run"),
         # `calls:` edges point from the caller to the callee.
-        ("do_run", "Config.from_yaml"),
+        ("do_run", "from_yaml"),
         ("do_run", "preflight"),
         # `returns:` edges point from the function to the returned-to node.
         ("do_run", "report"),
         # explicit top-level `edges:` entry (from -> to as written).
         ("preflight", "report"),
-        # a call between two functions nested in a group (path-qualified ids).
-        ("postprocess.summarize", "postprocess.plot"),
+        # a call between two functions nested in a group (names stay flat).
+        ("summarize", "plot"),
     }
     assert _edge_set(graph) == expected
 
@@ -116,11 +116,11 @@ def test_node_hierarchy_types_and_data():
     assert cls["parent"] is None
     assert cls["data"].get("loc") == "src/config.py"
 
-    attrs = _node(graph, "Config.attributes")
+    attrs = _node(graph, "attributes")
     assert attrs["type"] == "attributes"
     assert attrs["parent"] == "Config"
 
-    method = _node(graph, "Config.from_yaml")
+    method = _node(graph, "from_yaml")
     assert method["type"] == "method"  # via defaults: {class: method}
     assert method["parent"] == "Config"
 
@@ -148,10 +148,36 @@ def test_unmarked_top_level_key_is_error():
         parse({"nodes": {"loose_data": {"type": "file"}}})
 
 
-def test_dot_in_node_name_is_error():
-    """Dots separate path segments in ids, so declared names can't contain them."""
-    with pytest.raises(ValueError, match=r"\."):
-        parse({"nodes": {"$a.b": {}}})
+def test_dots_in_names_are_legal_and_meaningless():
+    """Dots carry no structure -- they're a natural way to hand-uniquify
+    common names ($Config.run vs $Runner.run)."""
+    graph = parse(
+        {
+            "nodes": {
+                "$Config": {"type": "class", "$Config.run": {"label": "run"}},
+                "$Runner": {"type": "class", "$Runner.run": {"label": "run"}},
+                "$f": {"calls": {"$Config.run": ""}},
+            }
+        }
+    )
+    assert _node(graph, "Config.run")["parent"] == "Config"
+    assert _node(graph, "Runner.run")["parent"] == "Runner"
+    assert ("f", "Config.run") in _edge_set(graph)
+
+
+def test_duplicate_names_across_parents_are_an_error():
+    """Names are one global namespace; nesting does not scope them."""
+    from io_flow.parser import DuplicateNodeError
+
+    with pytest.raises(DuplicateNodeError, match="run"):
+        parse(
+            {
+                "nodes": {
+                    "$Config": {"type": "class", "$run": {}},
+                    "$Runner": {"type": "class", "$run": {}},
+                }
+            }
+        )
 
 
 def test_unresolved_reference_warns_with_candidates():
@@ -224,7 +250,7 @@ def test_method_calls_are_resolved():
                 }
             }
         )
-    assert ("Runner.go", "helper", "step") in _labeled_edges(graph)
+    assert ("go", "helper", "step") in _labeled_edges(graph)
 
 
 def test_returns_creates_source_to_target_edge_with_label():
@@ -247,7 +273,7 @@ def test_returns_creates_source_to_target_edge_with_label():
     # Same source -> target direction and label handling as `calls:`.
     assert ("a", "b", "the value") in _labeled_edges(graph)
     assert ("a", "c", None) in _labeled_edges(graph)
-    assert ("Runner.go", "out", "result") in _labeled_edges(graph)
+    assert ("go", "out", "result") in _labeled_edges(graph)
 
 
 def test_unresolved_reference_makes_no_edge():
@@ -328,14 +354,14 @@ def test_node_level_edges_block():
                         "$a": {},
                         "$b": {},
                         "edges": [
-                            {"from": "$g.a", "to": "$g.b", "type": "passes", "label": "baton"},
+                            {"from": "$a", "to": "$b", "type": "passes", "label": "baton"},
                         ],
                     }
                 }
             }
         )
-    assert ("g.a", "g.b", "passes") in _labeled_edges_typed(graph)
-    assert ("g.a", "g.b", "baton") in _labeled_edges(graph)
+    assert ("a", "b", "passes") in _labeled_edges_typed(graph)
+    assert ("a", "b", "baton") in _labeled_edges(graph)
     # `edges` is reserved: it is consumed, not sidebar data.
     assert "edges" not in _node(graph, "g")["data"]
 
@@ -418,17 +444,17 @@ def test_node_label_overrides_display_name_but_not_id():
             }
         }
     )
-    # id stays the unique path; label carries the display name.
+    # id stays the unique name; label carries the display name.
     assert _node(graph, "run_v2")["label"] == "run"
-    # unlabeled node falls back to its short name.
+    # unlabeled node falls back to its name.
     assert _node(graph, "helper")["label"] == "helper"
     # nested label override.
-    assert _node(graph, "Runner.go_fast")["label"] == "go"
+    assert _node(graph, "go_fast")["label"] == "go"
 
 
-def test_label_defaults_to_short_name():
+def test_label_defaults_to_name():
     graph = parse({"nodes": {"$Runner": {"type": "class", "$go": {}}}})
-    assert _node(graph, "Runner.go")["label"] == "go"
+    assert _node(graph, "go")["label"] == "go"
 
 
 def test_any_node_with_children_is_a_compound_parent():
@@ -440,7 +466,7 @@ def test_any_node_with_children_is_a_compound_parent():
                     "$step1": {
                         "type": "group",
                         "loc": "s.py",
-                        "$a": {"calls": {"$step1.b": ""}},
+                        "$a": {"calls": {"$b": ""}},
                         "$b": {},
                     }
                 }
@@ -450,14 +476,14 @@ def test_any_node_with_children_is_a_compound_parent():
     assert grp["type"] == "group"
     assert grp["parent"] is None
     assert grp["data"].get("loc") == "s.py"  # unmarked keys become node data
-    # members are parented to the group; ids are path-qualified.
-    assert _node(graph, "step1.a")["parent"] == "step1"
-    assert _node(graph, "step1.b")["parent"] == "step1"
-    # edges between members resolve via full paths.
-    assert ("step1.a", "step1.b") in _edge_set(graph)
+    # members are parented to the group; names stay flat.
+    assert _node(graph, "a")["parent"] == "step1"
+    assert _node(graph, "b")["parent"] == "step1"
+    # edges between members resolve by name.
+    assert ("a", "b") in _edge_set(graph)
 
 
-def test_nesting_is_recursive_and_ids_are_paths():
+def test_nesting_is_recursive_and_ids_stay_flat():
     with warnings.catch_warnings():
         warnings.simplefilter("error")
         graph = parse(
@@ -476,11 +502,11 @@ def test_nesting_is_recursive_and_ids_are_paths():
             }
         )
     assert _node(graph, "outer")["parent"] is None
-    assert _node(graph, "outer.top")["parent"] == "outer"
-    assert _node(graph, "outer.inner")["parent"] == "outer"
-    assert _node(graph, "outer.inner.deep")["parent"] == "outer.inner"
-    assert _node(graph, "outer.inner.C")["parent"] == "outer.inner"
-    assert _node(graph, "outer.inner.C.m")["parent"] == "outer.inner.C"
+    assert _node(graph, "top")["parent"] == "outer"
+    assert _node(graph, "inner")["parent"] == "outer"
+    assert _node(graph, "deep")["parent"] == "inner"
+    assert _node(graph, "C")["parent"] == "inner"
+    assert _node(graph, "m")["parent"] == "C"
 
 
 def test_compound_can_act_as_a_function():
@@ -606,8 +632,8 @@ def test_defaults_block_types_children_by_parent_type():
         }
     )
     assert _node(graph, "untyped_root")["type"] == "input"
-    assert _node(graph, "C.m")["type"] == "method"
-    assert _node(graph, "g.f")["type"] == "function"
+    assert _node(graph, "m")["type"] == "method"
+    assert _node(graph, "f")["type"] == "function"
 
 
 def test_defaults_chain_through_defaulted_parents():
@@ -619,8 +645,8 @@ def test_defaults_chain_through_defaulted_parents():
         }
     )
     assert _node(graph, "outer")["type"] == "group"
-    assert _node(graph, "outer.inner")["type"] == "group"
-    assert _node(graph, "outer.inner.leaf")["type"] == "group"
+    assert _node(graph, "inner")["type"] == "group"
+    assert _node(graph, "leaf")["type"] == "group"
 
 
 def test_explicit_type_beats_defaults():
@@ -630,4 +656,4 @@ def test_explicit_type_beats_defaults():
             "nodes": {"$g": {"type": "group", "$c": {"type": "class"}}},
         }
     )
-    assert _node(graph, "g.c")["type"] == "class"
+    assert _node(graph, "c")["type"] == "class"

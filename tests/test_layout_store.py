@@ -36,6 +36,19 @@ def test_topology_hash_stable_and_edge_sensitive():
     assert layout_store.topology_hash(g2) != h1
 
 
+def test_topology_hash_is_parent_sensitive():
+    """Names survive regrouping, but parent-relative positions don't -- a
+    reparent must invalidate exact restore."""
+    g = parse_file(EXAMPLE)
+    h1 = layout_store.topology_hash(g)
+
+    g2 = parse_file(EXAMPLE)
+    for n in g2["nodes"]:
+        if n["id"] == "plot":  # lives in $postprocess; hoist to top level
+            n["parent"] = None
+    assert layout_store.topology_hash(g2) != h1
+
+
 def test_merge_preserves_every_comment(yaml_copy):
     graph = parse_file(yaml_copy)
     positions = {n["id"]: [10 + i, 20 + i] for i, n in enumerate(graph["nodes"])}
@@ -61,13 +74,13 @@ def test_merge_writes_compact_flow_style_block(yaml_copy):
 
 def test_round_trip_restore_matches(yaml_copy):
     graph = parse_file(yaml_copy)
-    positions = {"file1": [50, 117], "Config.from_yaml": [16, 117]}
+    positions = {"file1": [50, 117], "from_yaml": [16, 117]}
     layout_store.merge_positions(yaml_copy, graph, positions)
 
     saved = layout_store.read_layout(yaml_copy)
     assert saved["hash"] == layout_store.topology_hash(graph)
     assert saved["positions"]["file1"] == [50.0, 117.0]
-    assert saved["positions"]["Config.from_yaml"] == [16.0, 117.0]
+    assert saved["positions"]["from_yaml"] == [16.0, 117.0]
 
 
 def test_annotate_restore_when_hash_matches(yaml_copy):

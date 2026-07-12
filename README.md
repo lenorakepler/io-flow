@@ -58,7 +58,7 @@ nodes:
   $Config:
     type: class
     loc: src/config.py       # not reserved, not $-marked: free sidebar data
-    $from_yaml:              # child node; id "Config.from_yaml"
+    $from_yaml:              # child node; id "from_yaml"
       args: {path: $configfile}
 ```
 
@@ -77,17 +77,21 @@ Top-level keys:
 Inside a node's mapping:
 
 - **`$name:`** — a child node. Compound-ness is a state, not a type: any node
-  with `$`-children is a container. Ids are dotted paths (`$postprocess` >
-  `$plot` → `postprocess.plot`); names can't contain `.`; references always
-  use the full path. Labels default to the short name.
+  with `$`-children is a container. Names are globally unique and are the
+  ids; nesting only sets the parent, so regrouping a node never changes its
+  name — references and saved layouts survive reorganization. Labels default
+  to the name.
 - **`type:`** — free-form; maps straight to a template + `.node--<type>` CSS
   class, no registration anywhere.
-- **`label:`** — display-name override (the path id stays the unique key).
+- **`label:`** — display-name override (the name stays the unique key). When
+  two things naturally share a name, pick unique names — dots carry no
+  meaning, so `$Config.run` and `$Runner.run` are just two names — and label
+  them for display.
 - **relation names** (`args`/`calls`/`returns`/registered) — edge blocks.
 - **`edges:`** — a locally-declared explicit-edge list, handy for keeping a
   group's internal wiring inside the group. An omitted `from`/`to` defaults
   to the declaring node. Placement is organization only: references are
-  always full paths, so moving the list never changes its meaning.
+  always global names, so moving the list never changes its meaning.
 - **anything else** — free data (`loc:`, `cli:`, `description:`, ...) shown in
   the sidebar and available to templates.
 
@@ -100,7 +104,7 @@ always safe. Built-ins:
 | key        | direction               | example |
 |------------|-------------------------|---------|
 | `args:`    | referenced node → owner | `args: {path: $configfile, retries: 3}` |
-| `calls:`   | owner → referenced node | `calls: {$Config.from_yaml: "load config"}` |
+| `calls:`   | owner → referenced node | `calls: {$from_yaml: "load config"}` |
 | `returns:` | owner → referenced node | `returns: {$report: ""}` |
 
 An unresolved `$ref` prints a loud warning listing close candidates; an
@@ -221,8 +225,9 @@ src/io_flow/
 tests/              parser, layout_store, emit, server, cli
 ```
 
-Layout persistence is gated by a **topology hash** (sorted node ids + edge
-pairs). Hash matches the saved layout → positions are restored exactly and elkjs
+Layout persistence is gated by a **topology hash** (sorted `(id, parent)`
+pairs + edge pairs — parentage matters because saved positions are
+parent-relative). Hash matches the saved layout → positions are restored exactly and elkjs
 is skipped (and omitted from the artifact). Hash differs → elkjs re-lays-out
 (with the saved positions as hints) and the viewer shows a "topology changed"
 notice. Positions are never silently mixed.
@@ -234,7 +239,7 @@ notice. Positions are never silently mixed.
   nodes).
 - Child nodes are clamped inside their parent; parents don't auto-grow while
   dragging, but can be resized manually via the corner handle.
-- `data-node-id` attributes are used instead of `id`, because qualified ids
+- `data-node-id` attributes are used instead of `id`, because node names may
   contain dots that break `querySelector('#…')`.
 
 ## Tests
