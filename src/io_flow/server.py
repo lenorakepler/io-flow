@@ -113,11 +113,13 @@ class LayoutServer:
         port: int = 8137,
         css: str | Path | None = None,
         templates: str | Path | None = None,
+        skin: str | None = None,
     ):
         self.input_path = Path(input_path)
         self.host = host
         self.css = css
         self.templates = templates
+        self.skin = skin
         self.html = ""
         self.out_path = self.input_path.with_suffix(".html")
         self.rebuild()
@@ -150,7 +152,7 @@ class LayoutServer:
     def rebuild(self) -> None:
         graph = parse_file(self.input_path)
         layout_store.annotate_graph(graph, self.input_path)
-        self.html = emit.build_html(graph, css=self.css, templates=self.templates)
+        self.html = emit.build_html(graph, css=self.css, templates=self.templates, skin=self.skin)
         self.out_path.write_text(self.html, encoding="utf-8")
 
     def save(

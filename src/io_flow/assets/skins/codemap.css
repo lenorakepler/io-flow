@@ -1,0 +1,45 @@
+/* io-flow bundled skin: code-map (CSS half).
+ *
+ * Additive deltas over viewer.css for `io-flow walk` output (and any diagram
+ * whose nodes carry `source`/`code` plus args/returns/calls/... metadata).
+ * Loaded via `--skin codemap`, appended AFTER viewer.css so it overrides by the
+ * cascade -- it is not a full replacement, so viewer.css stays the single source
+ * of truth for everything else. */
+
+/* wider sidebar so source has room */
+#sidebar { width: 460px; }
+
+/* source / code block */
+#sidebar .sb-code {
+  margin: 16px 0 0;
+  padding: 10px 12px;
+  background: #0f172a;
+  color: #e2e8f0;
+  border-radius: 8px;
+  font: 11.5px/1.55 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  white-space: pre;
+  tab-size: 4;
+  overflow: auto;
+  max-height: 62vh;
+}
+#sidebar .sb-code code { font: inherit; color: inherit; background: none; padding: 0; }
+
+/* labeled bullet lists (args / returns / calls / modifies / attributes / bases) */
+#sidebar .sb-list { margin: 14px 0 0; }
+#sidebar .sb-list-h {
+  color: var(--muted);
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 3px;
+}
+#sidebar .sb-list ul { margin: 0; padding-left: 16px; }
+#sidebar .sb-list li {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11.5px;
+  line-height: 1.5;
+  word-break: break-all;
+}
+
+/* cross-file calls (walk `xcall` relation): red + dashed, like a call graph's */
+.edge--xcall { stroke: #ef4444; stroke-opacity: 0.8; stroke-dasharray: 5 4; }

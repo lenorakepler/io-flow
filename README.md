@@ -41,6 +41,15 @@ io-flow apply-layout example_input.yaml layout.json
 # columns/rows. Run it while `edit` is serving and watch the live reload.
 io-flow align example_input.yaml            # default tolerance: 8px
 io-flow align example_input.yaml --dry-run  # print what would move
+
+# Map a whole Python package into a diagram: one group per file, classes as
+# stacked members, edges from resolved calls (cross-file calls tagged `xcall`),
+# and each node carrying its source + args/returns/calls/modifies/attributes for
+# the sidebar. --repo defaults to CWD, --package to the repo name, --title to
+# "<repo> - <package>" (or just one when they match). Build it with the bundled
+# `codemap` skin (--skin) to render source + labeled metadata in the sidebar.
+io-flow walk --package mypkg -o mypkg.yaml
+io-flow build mypkg.yaml -o mypkg.html --skin codemap
 ```
 
 Opened over `http://localhost` (via `edit`) the **Save** button appears and
@@ -286,6 +295,17 @@ Per-project skins without editing the installed package:
 io-flow build pipeline.yaml --css my_skin.css --templates my_templates.js
 ```
 
+`--css`/`--templates` *replace* the packaged files. `--skin <name>` instead
+*layers* a bundled skin on top — its CSS is appended after `viewer.css` and its
+JS injected right after `templates.js` — so a skin holds only its overrides. The
+bundled `codemap` skin (`assets/skins/codemap.{css,js}`) renders a node's
+`source`/`code` as a `<pre>` and its `args`/`returns`/`calls`/`modifies`/
+`attributes`/`bases` as labeled lists — the sidebar for `io-flow walk` output:
+
+```bash
+io-flow build codebase.yaml -o codebase.html --skin codemap
+```
+
 **How much CSS controls.** Node *size* is genuinely CSS-owned: before layout,
 the engine measures each rendered node from the DOM (after fonts settle), so
 padding, font, and `max-width` changes flow straight into ELK and into
@@ -360,8 +380,9 @@ centers a node as the keyboard alternative to panning).
 
 ```
 src/io_flow/
-  cli.py            argparse: build / edit / check / apply-layout / align
+  cli.py            argparse: build / edit / check / apply-layout / align / walk
   align.py          snap almost-aligned saved positions (per sibling space)
+  walk.py           AST-walk a Python package -> io-flow YAML codebase map
   parser.py         two-pass YAML -> recursive graph model; EDGE_KEYS registry
   layout_store.py   layout: block read/merge (ruamel round-trip) + topology hash
   edge_store.py     append browser-created connections to edges: (append-only)

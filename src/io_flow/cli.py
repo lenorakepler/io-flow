@@ -6,6 +6,7 @@ Subcommands:
   check         parse only; report unresolved references (CI-friendly)
   apply-layout  merge a layout.json into the source YAML (no-server fallback)
   align         snap almost-aligned saved positions to exact columns/rows
+  walk          walk a Python package into an io-flow YAML codebase map
 """
 
 from __future__ import annotations
@@ -31,7 +32,7 @@ def cmd_build(args: argparse.Namespace) -> int:
     input_path = Path(args.input)
     out = Path(args.output) if args.output else input_path.with_suffix(".html")
     graph = _build_graph(input_path)
-    emit.write_html(graph, out, css=args.css, templates=args.templates)
+    emit.write_html(graph, out, css=args.css, templates=args.templates, skin=args.skin)
     slim = " (elkjs omitted: all positions pinned)" if emit.elk_omitted(graph) else ""
     print(f"wrote {out} ({len(graph['nodes'])} nodes, {len(graph['edges'])} edges){slim}")
     return 0
@@ -42,7 +43,8 @@ def cmd_edit(args: argparse.Namespace) -> int:
 
     input_path = Path(args.input)
     srv = server.LayoutServer(
-        input_path, host="127.0.0.1", port=args.port, css=args.css, templates=args.templates
+        input_path, host="127.0.0.1", port=args.port,
+        css=args.css, templates=args.templates, skin=args.skin,
     )
     url = srv.url
     if srv.port != args.port:
@@ -117,6 +119,23 @@ def cmd_align(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_walk(args: argparse.Namespace) -> int:
+    from . import walk as walk_mod
+
+    repo = Path(args.repo).resolve()
+    package = args.package or repo.name
+    package_dir = repo / package
+    if not package_dir.is_dir():
+        print(f"no package dir: {package_dir} (pass --package)", file=sys.stderr)
+        return 1
+    title = args.title or (package if repo.stem == package else f"{repo.stem} - {package}")
+    out = Path(args.output) if args.output else Path.cwd() / f"{Path(package).name}.walked.yaml"
+    stats = walk_mod.build_walk(repo, package, title, out, no_edges=args.no_edges)
+    print(f"wrote {out} ({stats['files']} files, {stats['symbols']} symbols, "
+          f"{stats['edges']} call edges)")
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="io-flow", description=__doc__)
     sub = p.add_subparsers(dest="command", required=True)
@@ -125,6 +144,9 @@ def build_parser() -> argparse.ArgumentParser:
         sp.add_argument("--css", help="project-local CSS replacing the packaged viewer.css")
         sp.add_argument(
             "--templates", help="project-local JS replacing the packaged templates.js"
+        )
+        sp.add_argument(
+            "--skin", help="bundled skin layered on top (e.g. 'codemap' for walk output)"
         )
 
     b = sub.add_parser("build", help="compile YAML to a single-file diagram.html")
@@ -166,6 +188,20 @@ def build_parser() -> argparse.ArgumentParser:
         "--dry-run", action="store_true", help="print what would move; don't write"
     )
     g.set_defaults(func=cmd_align)
+
+    w = sub.add_parser("walk", help="walk a Python package into an io-flow YAML codebase map")
+    w.add_argument("--repo", default=".", help="repo root to resolve paths against (default: CWD)")
+    w.add_argument("--package", default=None, help="package dir under the repo (default: repo name)")
+    w.add_argument(
+        "--title", default=None,
+        help="diagram title (default: '<repo> - <package>', or just one if they're equal)"
+    )
+    w.add_argument("-o", "--output", help="output YAML path (default: ./<package>.walked.yaml)")
+    w.add_argument(
+        "--no-edges", action="store_true",
+        help="emit nodes only; skip call/xcall edges (pure hierarchy, metadata intact)"
+    )
+    w.set_defaults(func=cmd_walk)
 
     return p
 
