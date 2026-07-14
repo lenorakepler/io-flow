@@ -301,10 +301,20 @@ def build_doc(syms: list[dict], title: str, no_edges: bool = False) -> tuple[dic
     if not no_edges:
         # cross-file call (calls is built-in); no edges emitted -> no xcall usage
         doc["relations"] = {"xcall": {"direction": "out"}}
+    if no_edges:
+        # With no call edges the layered algorithm has nothing to flow, so every
+        # (disconnected) file group stacks into one tall column. rectpacking
+        # packs the groups into a grid honoring aspectRatio; members still lay
+        # out inside each group and stacked classes stay stacked. Pure diagram
+        # data -- the engine forwards `algorithm`/`elk` straight to ELK.
+        diagram = {"algorithm": "rectpacking", "spacing": 40,
+                   "elk": {"elk.aspectRatio": "1.6"}, "classLayout": None}
+    else:
+        diagram = {"direction": "RIGHT", "spacing": 40, "layerSpacing": 90,
+                   "classLayout": None}
     doc.update({
         "defaults": {"group": "function", "class": "method", "_root": "node"},
-        "diagram": {"direction": "RIGHT", "spacing": 40, "layerSpacing": 90,
-                    "classLayout": None},
+        "diagram": diagram,
         "nodes": nodes,
     })
     stats = {"files": len(groups), "symbols": len(unit_of),
