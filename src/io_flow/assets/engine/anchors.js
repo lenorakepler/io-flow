@@ -120,5 +120,23 @@ window.IOFlow = window.IOFlow || {};
     }
   }
 
-  IOF.anchors = { init, apply, refresh };
+  // Pin one or both endpoint faces of an edge (used by connect.js when a face
+  // handle was chosen while drawing it). Writes into the same override map and
+  // edge.anchor field that cycle() drives, so the pin persists via /save and a
+  // later manual cycle() layers correctly. `faces` = {from?, to?} in
+  // right|bottom|left|top; null/absent ends are left automatic.
+  function setEndFaces(s, edge, faces) {
+    const key = keyOf(edge);
+    const ovr = state.anchorOverrides[key] || {};
+    if (faces.from) ovr.from = faces.from;
+    if (faces.to) ovr.to = faces.to;
+    if (Object.keys(ovr).length) state.anchorOverrides[key] = ovr;
+    // A runtime-added edge isn't in the boot-time `authored` array; give it an
+    // empty authored base so cycle()'s Object.assign(authored[i], ovr) works.
+    const i = state.graph.edges.indexOf(edge);
+    if (i >= 0) while (authored.length <= i) authored.push({});
+    edge.anchor = Object.assign({}, i >= 0 ? authored[i] : {}, ovr);
+  }
+
+  IOF.anchors = { init, apply, refresh, setEndFaces };
 })(window.IOFlow);

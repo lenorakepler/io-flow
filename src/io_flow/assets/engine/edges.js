@@ -134,6 +134,19 @@ window.IOFlow = window.IOFlow || {};
   }
   IOF.absPos = absPos;
 
+  // The four face anchor points of a node's visible box, in canvas coords --
+  // the same faces `anchor.from`/`anchor.to` name (SIDES). Used by connect.js
+  // to place face handles on a node that has no edge touching it yet.
+  function facePoints(state, id) {
+    const b = absPos(state, id);
+    return {
+      right: { x: b.x + b.w, y: b.y + b.h / 2, face: "right" },
+      left: { x: b.x, y: b.y + b.h / 2, face: "left" },
+      top: { x: b.x + b.w / 2, y: b.y, face: "top" },
+      bottom: { x: b.x + b.w / 2, y: b.y + b.h, face: "bottom" },
+    };
+  }
+
   // ---- Geometry pass ---------------------------------------------------------
   // One entry per edge, aligned with graph.edges order: resolved endpoint
   // boxes, the routing axis (dominant), stroke width, and — after the
@@ -380,5 +393,5 @@ window.IOFlow = window.IOFlow || {};
     state.svg.setAttribute("height", maxY + 80);
   }
 
-  IOF.edges = { renderAll, updateFor, resize, isAncestor, sankeyUnit };
+  IOF.edges = { renderAll, updateFor, resize, isAncestor, sankeyUnit, facePoints };
 })(window.IOFlow);

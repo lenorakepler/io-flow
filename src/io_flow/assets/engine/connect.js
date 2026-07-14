@@ -31,6 +31,10 @@ window.IOFlow = window.IOFlow || {};
   let labelInput = null;
   let active = false;
   let source = null;
+  let handleLayer = null; // canvas-level layer for the face handles
+  let sourceFace = null; // chosen source face (right|bottom|left|top) or null=auto
+  let targetFace = null; // chosen target face for the click that completes
+  let hoverTarget = null; // node currently showing target handles
 
   function init(s) {
     state = s;
@@ -42,6 +46,10 @@ window.IOFlow = window.IOFlow || {};
     labelInput = document.getElementById("connect-label");
     if (!btn || !bar) return;
     if (location.protocol === "file:") return; // stays hidden, like Save
+
+    handleLayer = document.createElement("div");
+    handleLayer.className = "connect-handle-layer";
+    state.canvas.appendChild(handleLayer);
 
     ping().then((ok) => {
       if (!ok) return;
@@ -56,6 +64,10 @@ window.IOFlow = window.IOFlow || {};
       "click",
       (ev) => {
         if (!active) return;
+        // A face-handle click is handled by the handle's own listener; don't
+        // let it read as a node or background click here (handles live in a
+        // canvas-level layer, so closest("[data-node-id]") would be null).
+        if (ev.target.closest && ev.target.closest(".connect-handle")) return;
         ev.stopPropagation();
         ev.preventDefault();
         const el = ev.target.closest && ev.target.closest("[data-node-id]");
@@ -68,6 +80,22 @@ window.IOFlow = window.IOFlow || {};
       },
       true
     );
+
+    // Hybrid handles: once a source is chosen, hovering a candidate target
+    // reveals its face handles so the target end can be pinned too. Handles
+    // vanish on leave, so the whole canvas is never dotted at once.
+    state.viewport.addEventListener("mouseover", (ev) => {
+      if (!active || source == null) return;
+      // Moving onto a handle must not clear the handles under the pointer.
+      if (ev.target.closest && ev.target.closest(".connect-handle")) return;
+      const el = ev.target.closest && ev.target.closest("[data-node-id]");
+      const id = el && el.getAttribute("data-node-id");
+      if (!id || id === source) {
+        if (hoverTarget) clearTargetHandles();
+        return;
+      }
+      if (id !== hoverTarget) renderTargetHandles(id);
+    });
 
     document.addEventListener("keydown", (e) => {
       if (e.key !== "Escape" || !active) return;
@@ -113,7 +141,9 @@ window.IOFlow = window.IOFlow || {};
   }
 
   // One selection step. Returns true when the mode consumed the pick (a11y.js
-  // uses this to route Enter/Space here before falling back to select).
+  // uses this to route Enter/Space here before falling back to select). A node
+  // *body* click completes with automatic anchors; a face handle completes via
+  // complete() with a pinned face.
   function pick(s, id) {
     if (!active) return false;
     if (source == null) {
@@ -121,27 +151,104 @@ window.IOFlow = window.IOFlow || {};
     } else if (source === id) {
       setSource(null); // picking the source again cancels it (no self-edges)
     } else {
-      addEdge(source, id);
-      setSource(null);
+      complete(id, null);
     }
     return true;
+  }
+
+  // Finish the edge source -> to, pinning either end's face when one was
+  // chosen (null = automatic). Shared by node-body clicks (via pick) and target
+  // face-handle clicks.
+  function complete(to, tFace) {
+    if (source == null || to === source) return;
+    addEdge(source, to, { from: sourceFace, to: tFace });
+    setSource(null);
   }
 
   function setSource(id) {
     if (source != null && state.nodeEls[source]) {
       state.nodeEls[source].classList.remove("connect-source");
     }
+    clearHandles();
+    sourceFace = null;
     source = id;
     if (id != null) {
       state.nodeEls[id].classList.add("connect-source");
-      setHint(`Source: ${id}. Click a target node (source again cancels).`);
+      renderSourceHandles(id);
+      setHint(`Source: ${id}. Click a target node, or a face to pin this end.`);
       announce(`Source ${id}. Choose a target node.`);
     } else {
       setHint("Click a source node.");
     }
   }
 
-  function addEdge(from, to) {
+  // --- face handles -------------------------------------------------------- #
+  function clearHandles() {
+    if (handleLayer) handleLayer.textContent = "";
+    hoverTarget = null;
+    targetFace = null;
+  }
+
+  function clearTargetHandles() {
+    if (!handleLayer) return;
+    handleLayer
+      .querySelectorAll(".connect-handle--target")
+      .forEach((h) => h.remove());
+    hoverTarget = null;
+  }
+
+  function makeHandle(pt, cls, onPick) {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "connect-handle " + cls;
+    b.style.left = pt.x + "px";
+    b.style.top = pt.y + "px";
+    b.addEventListener("click", (ev) => {
+      ev.stopPropagation();
+      onPick(pt.face, b);
+    });
+    return b;
+  }
+
+  function renderSourceHandles(id) {
+    if (!handleLayer || !IOF.edges.facePoints) return;
+    const pts = IOF.edges.facePoints(state, id);
+    Object.values(pts).forEach((pt) => {
+      const b = makeHandle(pt, "connect-handle--source", (face) => {
+        sourceFace = sourceFace === face ? null : face; // click again = auto
+        handleLayer
+          .querySelectorAll(".connect-handle--source")
+          .forEach((h) => h.classList.remove("connect-handle--picked"));
+        if (sourceFace) b.classList.add("connect-handle--picked");
+        setHint(
+          sourceFace
+            ? `Source face: ${sourceFace}. Click a target node or its face.`
+            : `Source: ${source}. Click a target node, or a face to pin this end.`
+        );
+      });
+      if (pt.face === sourceFace) b.classList.add("connect-handle--picked");
+      b.title = `Pin source to ${pt.face} face`;
+      b.setAttribute("aria-label", b.title);
+      handleLayer.appendChild(b);
+    });
+  }
+
+  function renderTargetHandles(id) {
+    clearTargetHandles();
+    if (!handleLayer || !IOF.edges.facePoints) return;
+    hoverTarget = id;
+    const pts = IOF.edges.facePoints(state, id);
+    Object.values(pts).forEach((pt) => {
+      const b = makeHandle(pt, "connect-handle--target", (face) =>
+        complete(id, face)
+      );
+      b.title = `Connect to ${id} at its ${pt.face} face`;
+      b.setAttribute("aria-label", b.title);
+      handleLayer.appendChild(b);
+    });
+  }
+
+  function addEdge(from, to, faces) {
     const type = typeInput ? typeInput.value.trim() : "";
     const label = labelInput ? labelInput.value.trim() : "";
     const dup = state.graph.edges.some(
@@ -154,13 +261,18 @@ window.IOFlow = window.IOFlow || {};
     if (dup) {
       setHint(`${from} → ${to} already exists. Click a source node.`);
       announce("Those nodes are already connected.");
-      return;
+      return null;
     }
     const edge = { source: from, target: to };
     if (type) edge.type = type;
     if (label) edge.label = label;
     state.graph.edges.push(edge);
     state.pendingEdges.push(edge);
+    // Pin chosen faces before the first render so the edge routes out/into
+    // them immediately; anchors.js owns the override map + persistence.
+    if (faces && (faces.from || faces.to) && IOF.anchors && IOF.anchors.setEndFaces) {
+      IOF.anchors.setEndFaces(state, edge, faces);
+    }
     // dim.js builds its incidence map once at boot; keep it in step so
     // selecting either endpoint lights the new edge without a reload.
     if (state.dim && state.dim.incident) {
@@ -169,8 +281,13 @@ window.IOFlow = window.IOFlow || {};
     }
     IOF.edges.renderAll(state);
     if (IOF.save) IOF.save.markDirty(state);
-    setHint(`Added ${from} → ${to}. Click a source node.`);
+    const pinned =
+      faces && (faces.from || faces.to)
+        ? ` (${faces.from || "auto"}→${faces.to || "auto"})`
+        : "";
+    setHint(`Added ${from} → ${to}${pinned}. Click a source node.`);
     announce(`Connected ${from} to ${to}. Choose a source node.`);
+    return edge;
   }
 
   function setHint(text) {
