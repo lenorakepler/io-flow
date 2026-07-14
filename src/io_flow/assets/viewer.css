@@ -21,13 +21,19 @@
   --option: #7c3aed;
   --param: #0e9f6e;
   --function: #d97706;
+  --function-light: color-mix(in oklab, #ffffff 100%, var(--function) 25%);
   --method: #db2777;
-  --class: #334155;
+  --method-light: color-mix(in oklab, #ffffff 100%, var(--method) 25%);
+  --class: #bad4ff;
+  --class-light: color-mix(in oklab, #ffffff 100%, var(--class) 25%);
   --attr: #0891b2;
-  --group: #b45309;
+  --group: #d6d6d5;
+  --group-light: color-mix(in oklab, #ffffff 100%, var(--group) 25%);
 }
 
-* { box-sizing: border-box; }
+* {
+  box-sizing: border-box;
+}
 
 /* Visually hidden but exposed to assistive tech (a11y.js text layers). */
 .sr-only {
@@ -42,15 +48,27 @@
   border: 0;
 }
 
-html, body {
+html,
+body {
   margin: 0;
   height: 100%;
-  font: 14px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  font:
+    14px/1.4 -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    Roboto,
+    Helvetica,
+    Arial,
+    sans-serif;
   color: var(--ink);
   background: var(--bg);
 }
 
-#app { position: fixed; inset: 0; overflow: hidden; }
+#app {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+}
 
 #viewport {
   position: absolute;
@@ -58,7 +76,9 @@ html, body {
   overflow: hidden;
   cursor: grab;
 }
-#viewport:active { cursor: grabbing; }
+#viewport:active {
+  cursor: grabbing;
+}
 
 #canvas {
   position: absolute;
@@ -73,6 +93,7 @@ html, body {
   left: 0;
   overflow: visible;
   pointer-events: none;
+  z-index: 50000;
 }
 #edges .edge {
   fill: none;
@@ -81,18 +102,30 @@ html, body {
   transition: opacity 0.18s ease;
 }
 #edges #arrow path,
-#edges #arrow-flow path { fill: var(--edge); }
+#edges #arrow-flow path {
+  fill: var(--edge);
+}
 /* Weighted edges read better translucent (crossings stay legible) and solid
  * (per-type dashes turn into bricks at flow widths). */
-#edges .edge--weighted { stroke-opacity: 0.55; stroke-dasharray: none; }
+#edges .edge--weighted {
+  stroke-opacity: 0.55;
+  stroke-dasharray: none;
+}
 
 /* Per-type edge styling — every edge carries `edge--<type>` (the YAML edge
  * kind: args / calls / returns / any custom tag). Add rules freely. */
-.edge--calls { stroke-dasharray: 6 4; }
-.edge--returns { stroke-dasharray: 2 3; }
+.edge--calls {
+  stroke-dasharray: 6 4;
+}
+.edge--returns {
+  stroke-dasharray: 2 3;
+}
 #edges .edge-label {
   fill: var(--muted);
-  font: 11px ui-sans-serif, system-ui, sans-serif;
+  font:
+    11px ui-sans-serif,
+    system-ui,
+    sans-serif;
   paint-order: stroke;
   stroke: var(--bg, #fff);
   stroke-width: 3px;
@@ -110,9 +143,13 @@ html, body {
   box-shadow: 0 1px 2px rgba(16, 24, 40, 0.06);
   cursor: pointer;
   user-select: none;
-  transition: opacity 0.18s ease, box-shadow 0.12s ease;
+  transition:
+    opacity 0.18s ease,
+    box-shadow 0.12s ease;
 }
-.node:hover { box-shadow: 0 2px 8px rgba(16, 24, 40, 0.14); }
+.node:hover {
+  box-shadow: 0 2px 8px rgba(16, 24, 40, 0.14);
+}
 .node:focus-visible,
 .node__collapse:focus-visible,
 #sidebar .sb-close:focus-visible {
@@ -120,9 +157,19 @@ html, body {
   outline-offset: 2px;
 }
 
-.node__title { font-weight: 600; white-space: nowrap; }
-.node__meta { color: var(--muted); font-size: 12px; margin-top: 2px; white-space: nowrap; }
-.node__meta code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+.node__title {
+  font-weight: 600;
+  white-space: nowrap;
+}
+.node__meta {
+  color: var(--muted);
+  font-size: 12px;
+  margin-top: 2px;
+  white-space: nowrap;
+}
+.node__meta code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
 .node__badge {
   display: inline-block;
   font-size: 10px;
@@ -136,27 +183,46 @@ html, body {
 }
 
 /* Per-type accents: left border + badge color. */
-.node--file { border-left: 4px solid var(--file); }
-.node--file .node__badge { background: var(--file); }
-.node--option { border-left: 4px solid var(--option); }
-.node--option .node__badge { background: var(--option); }
-.node--parameter { border-left: 4px solid var(--param); }
-.node--parameter .node__badge { background: var(--param); }
-.node--function { border-left: 4px solid var(--function); }
-.node--method { border-left: 4px solid var(--method); }
-.node--attributes { border-left: 4px solid var(--attr); background: #f0fbff; }
+.node--file {
+  border-left: 4px solid var(--file);
+}
+.node--file .node__badge {
+  background: var(--file);
+}
+.node--option {
+  border-left: 4px solid var(--option);
+}
+.node--option .node__badge {
+  background: var(--option);
+}
+.node--parameter {
+  border-left: 4px solid var(--param);
+}
+.node--parameter .node__badge {
+  background: var(--param);
+}
+.node--function {
+  border-left: 4px solid var(--function);
+}
+.node--method {
+  border-left: 4px solid var(--method);
+}
+.node--attributes {
+  border-left: 4px solid var(--attr);
+  background: #f0fbff;
+}
 
 /* Compound class node wraps its children. The children mount shares the class
  * node's origin (inset:0) so ELK's parent-relative child coordinates map 1:1;
  * the header is an absolute overlay sitting in ELK's reserved top padding. */
 .node--class {
-  background: rgba(51, 65, 85, 0.05);
+  background: var(--class-light);
   border: 1px dashed var(--class);
   max-width: none;
   padding: 0;
   cursor: pointer;
 }
-.node--class .node__header {
+.node--class > .node__header {
   position: absolute;
   top: 0;
   left: 0;
@@ -167,13 +233,13 @@ html, body {
   gap: 8px;
   padding: 0 10px;
   border-bottom: 1px dashed var(--class);
-  background: rgba(51, 65, 85, 0.08);
+  background: var(--class);
   border-radius: 8px 8px 0 0;
   z-index: 1;
 }
-.node--class .node__children {
+.node--class > .node__children {
   position: absolute;
-  inset: 0;   /* origin == class node origin, matching ELK child coords */
+  inset: 0; /* origin == class node origin, matching ELK child coords */
 }
 
 /* Class-layout mode (diagram: classLayout:): the engine adds .node--stacked
@@ -192,13 +258,13 @@ html, body {
 /* Compound group node: same overlay-header + inset-children layout as class,
  * with its own accent so groups read as a distinct container. */
 .node--group {
-  background: rgba(180, 83, 9, 0.05);
+  background: var(--group-light);
   border: 1px dashed var(--group);
   max-width: none;
   padding: 0;
   cursor: pointer;
 }
-.node--group .node__header {
+.node--group > .node__header {
   position: absolute;
   top: 0;
   left: 0;
@@ -209,11 +275,11 @@ html, body {
   gap: 8px;
   padding: 0 10px;
   border-bottom: 1px dashed var(--group);
-  background: rgba(180, 83, 9, 0.1);
+  background: var(--group);
   border-radius: 8px 8px 0 0;
   z-index: 1;
 }
-.node--group .node__children {
+.node--group > .node__children {
   position: absolute;
   inset: 0;
 }
@@ -221,7 +287,7 @@ html, body {
 /* An empty compound (class/group with no members yet) sizes to its header
  * text like a leaf: the header sits in normal flow instead of overlaying the
  * (nonexistent) children. The engine adds .node--empty (viewer.js). */
-.node--empty .node__header {
+.node--empty > .node__header {
   position: static;
   border-bottom: none;
   border-radius: 8px;
@@ -247,8 +313,42 @@ html, body {
   cursor: pointer;
   z-index: 3;
 }
-.anchor-handle:hover { border-color: var(--file); }
-.anchor-handle--pinned { background: var(--edge); }
+.anchor-handle:hover {
+  border-color: var(--file);
+}
+.anchor-handle--pinned {
+  background: var(--edge);
+}
+
+/* Face handles shown while drawing a connection (connect.js). Same round dot
+   as anchor handles; source handles persist while a source is chosen, target
+   handles appear on the hovered node. Only present during connect mode. */
+.connect-handle-layer {
+  position: absolute;
+  top: 0;
+  left: 0;
+}
+.connect-handle {
+  position: absolute;
+  width: 11px;
+  height: 11px;
+  padding: 0;
+  transform: translate(-50%, -50%);
+  border: 2px solid var(--edge);
+  border-radius: 50%;
+  background: #fff;
+  cursor: pointer;
+  z-index: 4;
+}
+.connect-handle:hover {
+  border-color: var(--file);
+}
+.connect-handle--target {
+  border-style: dashed;
+}
+.connect-handle--picked {
+  background: var(--edge);
+}
 
 /* ---- Resize handle (compounds only) ----------------------------------------- */
 .node__resize {
@@ -274,12 +374,21 @@ html, body {
   opacity: 0;
   transition: opacity 0.12s ease;
 }
-.node:hover > .node__resize::after { opacity: 1; }
-.node--collapsed .node__resize { display: none; }
+.node:hover > .node__resize::after {
+  opacity: 1;
+}
+.node--collapsed .node__resize {
+  display: none;
+}
 
 /* ---- Collapse --------------------------------------------------------------- */
-.node--collapsed .node__children { display: none; }
-.node--collapsed .node__header { border-bottom: none; border-radius: 8px; }
+.node--collapsed .node__children {
+  display: none;
+}
+.node--collapsed .node__header {
+  border-bottom: none;
+  border-radius: 8px;
+}
 .node__collapse {
   border: none;
   background: none;
@@ -326,11 +435,18 @@ html, body {
   max-width: none;
   box-shadow: none;
 }
-#legend .node .node__title { font-weight: 500; font-size: 11px; }
+#legend .node .node__title {
+  font-weight: 500;
+  font-size: 11px;
+}
 
 /* ---- Dim (M3) ------------------------------------------------------------- */
-.dimmed { opacity: 0.12; }
-.node.dimmed { pointer-events: none; }
+.dimmed {
+  opacity: 0.12;
+}
+.node.dimmed {
+  pointer-events: none;
+}
 
 /* ---- Sidebar (M3) --------------------------------------------------------- */
 #sidebar {
@@ -346,15 +462,44 @@ html, body {
   overflow-y: auto;
   z-index: 20;
 }
-#sidebar[hidden] { display: none; }
-#sidebar h2 { margin: 0 0 4px; font-size: 16px; word-break: break-all; }
-#sidebar .sb-type { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; }
-#sidebar dl { margin: 16px 0 0; display: grid; grid-template-columns: auto 1fr; gap: 6px 12px; }
-#sidebar dt { color: var(--muted); font-size: 12px; }
-#sidebar dd { margin: 0; word-break: break-word; }
+#sidebar[hidden] {
+  display: none;
+}
+#sidebar h2 {
+  margin: 0 0 4px;
+  font-size: 16px;
+  word-break: break-all;
+}
+#sidebar .sb-type {
+  color: var(--muted);
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+#sidebar dl {
+  margin: 16px 0 0;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 6px 12px;
+}
+#sidebar dt {
+  color: var(--muted);
+  font-size: 12px;
+}
+#sidebar dd {
+  margin: 0;
+  word-break: break-word;
+}
 #sidebar .sb-close {
-  position: absolute; top: 12px; right: 12px;
-  border: none; background: none; font-size: 20px; line-height: 1; cursor: pointer; color: var(--muted);
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  border: none;
+  background: none;
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+  color: var(--muted);
 }
 
 /* ---- Notice + save button ------------------------------------------------- */
@@ -372,7 +517,9 @@ html, body {
   color: #92400e;
   box-shadow: 0 2px 8px rgba(16, 24, 40, 0.12);
 }
-#notice[hidden] { display: none; }
+#notice[hidden] {
+  display: none;
+}
 
 #save-btn {
   position: absolute;
@@ -389,8 +536,13 @@ html, body {
   cursor: pointer;
   box-shadow: 0 2px 10px rgba(16, 24, 40, 0.2);
 }
-#save-btn[hidden] { display: none; }
-#save-btn:disabled { opacity: 0.6; cursor: default; }
+#save-btn[hidden] {
+  display: none;
+}
+#save-btn:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
 
 /* ---- Connect mode (create edges in edit mode; append-only) ----------------- */
 #connect-btn {
@@ -408,7 +560,9 @@ html, body {
   cursor: pointer;
   box-shadow: 0 2px 10px rgba(16, 24, 40, 0.2);
 }
-#connect-btn[hidden] { display: none; }
+#connect-btn[hidden] {
+  display: none;
+}
 #connect-btn[aria-pressed="true"] {
   background: var(--ink);
   border-color: var(--ink);
@@ -430,8 +584,12 @@ html, body {
   font-size: 13px;
   box-shadow: 0 2px 10px rgba(16, 24, 40, 0.12);
 }
-#connect-bar[hidden] { display: none; }
-#connect-hint { color: var(--muted); }
+#connect-bar[hidden] {
+  display: none;
+}
+#connect-hint {
+  color: var(--muted);
+}
 #connect-bar input {
   padding: 6px 10px;
   border: 1px solid var(--line);
@@ -440,10 +598,14 @@ html, body {
   font-size: 13px;
 }
 body.connecting #viewport,
-body.connecting #viewport .node { cursor: crosshair; }
+body.connecting #viewport .node {
+  cursor: crosshair;
+}
 .node.connect-source {
   outline: 2px dashed var(--file);
   outline-offset: 2px;
 }
 
-body:not(.ready) #canvas { visibility: hidden; }
+body:not(.ready) #canvas {
+  visibility: hidden;
+}
