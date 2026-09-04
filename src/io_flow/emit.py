@@ -93,7 +93,19 @@ def build_html(
     the packaged ``viewer.css`` / ``templates.js``. ``skin`` names a bundled
     skin (e.g. ``codemap``) *layered on top* -- additive css + a sidebar/JS
     override -- without forking the base assets.
+
+    Any of the three omitted here fall back to the diagram's own ``style:``
+    block (see the parser), so a YAML can carry its look; an explicit argument
+    (typically a CLI flag) always wins.
     """
+    style = graph.get("style") or {}
+    if css is None:
+        css = style.get("css")
+    if templates is None:
+        templates = style.get("templates")
+    if skin is None:
+        skin = style.get("skin")
+
     shell = _read("viewer.html")
     styles = Path(css).read_text(encoding="utf-8") if css else _read("viewer.css")
 
@@ -119,7 +131,10 @@ def build_html(
     title = graph.get("title") or DEFAULT_TITLE
     out = shell.replace("/*__STYLES__*/", styles)
     out = out.replace("<!--__TITLE__-->", html.escape(str(title)))
-    out = out.replace("/*__GRAPH__*/", _inline_json(graph))
+    # `style` is a build-time concern (and holds local filesystem paths); keep
+    # it out of the viewer JSON embedded in the artifact.
+    graph_json = {k: v for k, v in graph.items() if k != "style"} if "style" in graph else graph
+    out = out.replace("/*__GRAPH__*/", _inline_json(graph_json))
     out = out.replace("<!--__SCRIPTS__-->", scripts_html)
     return out
 

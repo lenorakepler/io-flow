@@ -46,10 +46,11 @@ io-flow align example_input.yaml --dry-run  # print what would move
 # stacked members, edges from resolved calls (cross-file calls tagged `xcall`),
 # and each node carrying its source + args/returns/calls/modifies/attributes for
 # the sidebar. --repo defaults to CWD, --package to the repo name, --title to
-# "<repo> - <package>" (or just one when they match). Build it with the bundled
-# `codemap` skin (--skin) to render source + labeled metadata in the sidebar.
+# "<repo> - <package>" (or just one when they match). The emitted YAML declares
+# `style: {skin: codemap}` itself, so build renders the source + labeled
+# metadata sidebar with no extra flag.
 io-flow walk --package mypkg -o mypkg.yaml
-io-flow build mypkg.yaml -o mypkg.html --skin codemap
+io-flow build mypkg.yaml -o mypkg.html
 ```
 
 Opened over `http://localhost` (via `edit`) the **Save** button appears and
@@ -305,6 +306,22 @@ bundled `codemap` skin (`assets/skins/codemap.{css,js}`) renders a node's
 ```bash
 io-flow build codebase.yaml -o codebase.html --skin codemap
 ```
+
+A diagram can also carry its own look via a top-level `style:` block, so you
+don't repeat the flags on every `build`/`edit`:
+
+```yaml
+style:
+  skin: codemap        # bundled skin name
+  css: theme.css       # path, resolved relative to THIS yaml file
+  templates: nodes.js  # path, resolved relative to THIS yaml file
+```
+
+Same three knobs as `--skin`/`--css`/`--templates`, and a CLI flag still wins
+over the block (handy for a one-off). Because `css`/`templates` resolve against
+the YAML's own directory, `io-flow edit` finds them no matter which directory
+you run from — and under `edit`, editing a `style:`-declared CSS file live-
+reloads the browser just like editing the YAML.
 
 **How much CSS controls.** Node *size* is genuinely CSS-owned: before layout,
 the engine measures each rendered node from the DOM (after fonts settle), so

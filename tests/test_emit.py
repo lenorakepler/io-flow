@@ -64,3 +64,24 @@ def test_css_and_templates_overrides(tmp_path):
     assert "/* custom templates */" in html
     # The packaged templates were replaced, not appended.
     assert "USER-EDITABLE SURFACE" not in html
+
+
+def test_yaml_style_block_drives_build(tmp_path):
+    css = tmp_path / "theme.css"
+    css.write_text("/* MARK */ .node { color: teal; }", encoding="utf-8")
+    html = emit.build_html(_graph(style={"css": str(css)}))
+    assert "/* MARK */" in html
+    # The style block itself must not leak into the embedded viewer JSON.
+    start = html.index('<script id="graph-data" type="application/json">')
+    body = html[start:].split(">", 1)[1].split("</script")[0]
+    assert "style" not in json.loads(body)
+
+
+def test_cli_arg_overrides_yaml_style(tmp_path):
+    yaml_css = tmp_path / "yaml.css"
+    yaml_css.write_text("/* FROM-YAML */", encoding="utf-8")
+    flag_css = tmp_path / "flag.css"
+    flag_css.write_text("/* FROM-FLAG */", encoding="utf-8")
+    html = emit.build_html(_graph(style={"css": str(yaml_css)}), css=flag_css)
+    assert "/* FROM-FLAG */" in html
+    assert "/* FROM-YAML */" not in html
