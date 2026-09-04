@@ -786,3 +786,24 @@ def test_style_css_path_resolves_relative_to_yaml(tmp_path):
     graph = parse_file(tmp_path / "diag.yaml")
     # skin stays a bare name; css becomes an absolute path next to the YAML.
     assert graph["style"]["css"] == str(tmp_path / "theme.css")
+
+
+def test_style_extra_css_list_parsed_and_validated():
+    g = parse({"style": {"extra_css": ["a.css", "b.css"]}, "nodes": {"$a": {}}})
+    assert g["style"]["extra_css"] == ["a.css", "b.css"]
+    # A bare string is coerced to a one-item list.
+    g1 = parse({"style": {"extra_css": "only.css"}, "nodes": {"$a": {}}})
+    assert g1["style"]["extra_css"] == ["only.css"]
+    # A non-string entry is a loud error.
+    with pytest.raises(ValueError, match="extra_css"):
+        parse({"style": {"extra_css": [1, 2]}, "nodes": {"$a": {}}})
+
+
+def test_style_extra_css_paths_resolve_relative_to_yaml(tmp_path):
+    (tmp_path / "sub").mkdir()
+    (tmp_path / "sub" / "x.css").write_text(".n {}", encoding="utf-8")
+    (tmp_path / "d.yaml").write_text(
+        "style: {extra_css: [sub/x.css]}\nnodes: {$a: {}}\n", encoding="utf-8"
+    )
+    g = parse_file(tmp_path / "d.yaml")
+    assert g["style"]["extra_css"] == [str(tmp_path / "sub" / "x.css")]

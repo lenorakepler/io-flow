@@ -32,7 +32,10 @@ def cmd_build(args: argparse.Namespace) -> int:
     input_path = Path(args.input)
     out = Path(args.output) if args.output else input_path.with_suffix(".html")
     graph = _build_graph(input_path)
-    emit.write_html(graph, out, css=args.css, templates=args.templates, skin=args.skin)
+    emit.write_html(
+        graph, out, css=args.css, templates=args.templates, skin=args.skin,
+        extra_css=args.extra_css,
+    )
     slim = " (elkjs omitted: all positions pinned)" if emit.elk_omitted(graph) else ""
     print(f"wrote {out} ({len(graph['nodes'])} nodes, {len(graph['edges'])} edges){slim}")
     return 0
@@ -45,6 +48,7 @@ def cmd_edit(args: argparse.Namespace) -> int:
     srv = server.LayoutServer(
         input_path, host="127.0.0.1", port=args.port,
         css=args.css, templates=args.templates, skin=args.skin,
+        extra_css=args.extra_css,
     )
     url = srv.url
     if srv.port != args.port:
@@ -147,6 +151,10 @@ def build_parser() -> argparse.ArgumentParser:
         )
         sp.add_argument(
             "--skin", help="bundled skin layered on top (e.g. 'codemap' for walk output)"
+        )
+        sp.add_argument(
+            "--extra-css", action="append", dest="extra_css", metavar="FILE",
+            help="additive stylesheet appended after base/skin css (repeatable)"
         )
 
     b = sub.add_parser("build", help="compile YAML to a single-file diagram.html")

@@ -313,11 +313,19 @@ don't repeat the flags on every `build`/`edit`:
 ```yaml
 style:
   skin: codemap        # bundled skin name
-  css: theme.css       # path, resolved relative to THIS yaml file
-  templates: nodes.js  # path, resolved relative to THIS yaml file
+  css: theme.css       # path, resolved relative to THIS yaml file (replaces viewer.css)
+  templates: nodes.js  # path, resolved relative to THIS yaml file (replaces templates.js)
+  extra_css:           # additive: appended after base + skin css, so they override selectively
+    - skin/overrides.css
 ```
 
-Same three knobs as `--skin`/`--css`/`--templates`, and a CLI flag still wins
+`css:`/`templates:` *replace* the packaged file; `extra_css:` (a path or list
+of paths) is *additive* — appended last so it wins the cascade without you
+having to fork `viewer.css`. Use `extra_css` when you only have a few overrides,
+`css` when you're providing a whole stylesheet.
+
+Same knobs as `--skin`/`--css`/`--templates`/`--extra-css` (`--extra-css` is
+repeatable), and a CLI flag still wins
 over the block (handy for a one-off). Because `css`/`templates` resolve against
 the YAML's own directory, `io-flow edit` finds them no matter which directory
 you run from — and under `edit`, editing a `style:`-declared CSS file live-
