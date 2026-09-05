@@ -299,13 +299,18 @@ HTML with `{{ }}`, rendered by Jinja in Python at build time:
 ```
 my-diagram.yaml
 templates/
-  queue.html
+  queue.html.j2
 ```
 ```html
-<!-- templates/queue.html — the whole thing -->
+<!-- templates/queue.html.j2 — the whole thing -->
 <div class="node__title">{{ label }} <span class="node__badge">queue</span></div>
 {% if data.depth %}<div class="node__meta">{{ data.depth }} waiting</div>{% endif %}
 ```
+
+Use `<type>.html.j2` or plain `<type>.html` — both work everywhere. `.html.j2`
+is what editors recognize as Jinja (VS Code's Better Jinja, PyCharm's Jinja2
+file type), so `{# comments #}` and tags highlight instead of reading as broken
+HTML.
 
 The filename is the registration — no map, no closure, and values are
 autoescaped, so there is no `esc()` to forget. A type with **no** `<type>.html`
@@ -325,8 +330,9 @@ one-line file:
 {% block header %}<span class="node__title">{{ label }}</span>{% endblock %}
 ```
 
-`_simple.html` and `_compound.html` ship with io-flow (a template of your own
-with that name shadows it); `_compound.html` also documents the four
+`_simple.html` and `_compound.html` ship with io-flow (as `.html.j2` files —
+`{% extends %}` finds either spelling; a template of your own with that name
+shadows the packaged one). `_compound.html` also documents the four
 non-obvious CSS rules a compound node needs. **Names come from the node's own
 type, never from the template it inherited** — the wrapper's `node--<type>`
 class is set by the engine from `node.type`, and `{{ type }}` inside a template
@@ -338,14 +344,16 @@ independently — a type can have a body template, a sidebar template, both, or
 neither:
 
 ```html
-<!-- templates/queue.sidebar.html -->
+<!-- templates/queue.sidebar.html.j2 -->
 {% extends "_sidebar.html" %}                       <!-- every data field as a row -->
 {% block rows %}<dt>depth</dt><dd>{{ data.depth }} waiting</dd>{{ super() }}{% endblock %}
 ```
 
 The engine still owns the panel chrome (close button, type tag, title); a type
-with no sidebar template falls through to `IOF.sidebars` and then to the generic
-data dump, and a prerendered sidebar wins over the `codemap` skin's layout.
+with no sidebar template falls through to the active skin's `<name>.sidebar.html`
+(if it has one), then to `IOF.sidebars`, then to the generic data dump. The
+bundled `codemap` skin is exactly that: a `codemap.sidebar.html.j2` covering every
+type, which a `templates/<type>.sidebar.html` of yours overrides per type.
 
 Template context: `label` (falls back to the id), `id`, `type`, `data` (every
 non-reserved YAML key on the node), `parent`, and the whole `node`. Styling is
@@ -358,12 +366,13 @@ io-flow build pipeline.yaml --css my_skin.css --templates my_templates.js
 ```
 
 `--css`/`--templates` *replace* the packaged files. `--skin` instead *layers* a
-skin on top — its CSS is appended after `viewer.css` and its JS injected right
-after `templates.js` — so a skin holds only its overrides. A skin entry is
-either a **bundled name** (no suffix, e.g. `codemap`, loading
-`assets/skins/codemap.{css,js}`) or a **project-local `.css`/`.js` file**; the
-flag is repeatable and entries layer in order. The bundled `codemap` skin
-renders a node's
+skin on top — its CSS is appended after `viewer.css`, its JS injected right
+after `templates.js`, and its `<name>.sidebar.html` becomes the default sidebar
+template — so a skin holds only its overrides. A skin entry is either a
+**bundled name** (no suffix, e.g. `codemap`, loading any of
+`assets/skins/codemap.{css,js,sidebar.html.j2}`) or a **project-local
+`.css`/`.js`/`.sidebar.html[.j2]` file**; the flag is repeatable and entries layer in
+order. The bundled `codemap` skin renders a node's
 `source`/`code` as a `<pre>` and its `args`/`returns`/`calls`/`modifies`/
 `attributes`/`bases` as labeled lists — the sidebar for `io-flow walk` output:
 

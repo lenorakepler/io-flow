@@ -1,0 +1,56 @@
+{# io-flow bundled skin: code-map (sidebar half).
+
+   The default sidebar for every node of a diagram built with `skin: codemap`
+   -- `io-flow walk` output, or anything whose nodes carry source plus
+   args/returns/calls/... metadata. Rendered at build time (io_flow/
+   jinja_templates.py); a type with its own `templates/<type>.sidebar.html`
+   wins over this. Paired with codemap.css, which styles .sb-list / .sb-code.
+
+   Scalars become a definition list in a fixed order, lists and maps become
+   labeled bullet blocks, and source lands last in a full-width <pre>. #}
+{% set LABELS = {"arg_names": "args", "return_exprs": "returns", "callees": "calls"} %}
+{# Display order for the keys `io-flow walk` emits; anything else follows, in
+   its own order. `args`/`calls`/`returns` are reserved relation keys that would
+   create edges, hence walk's safe key names and the relabeling above. #}
+{% set ORDER = ["module", "kind", "loc", "description", "cli", "bases",
+                "attributes", "arg_names", "return_exprs", "callees", "modifies"] %}
+{# `calls`/`xcall` are edge wiring, already drawn on the canvas and shown as
+   `callees`; source/code get the <pre> below; label is in the panel chrome. #}
+{% set SKIP = ["code", "source", "calls", "xcall", "label"] %}
+{% set keys = ORDER | select("in", data) | list
+            + data | reject("in", ORDER) | reject("in", SKIP) | list %}
+{% set ns = namespace(rows=[], blocks=[]) %}
+{% for k in keys if data[k] or data[k] == 0 %}
+{%   if data[k] is string or data[k] is number %}
+{%     set ns.rows = ns.rows + [k] %}
+{%   else %}
+{%     set ns.blocks = ns.blocks + [k] %}
+{%   endif %}
+{% endfor %}
+{% set source = data.source or data.code %}
+{% if ns.rows %}
+<dl>
+{% for k in ns.rows %}
+  <dt>{{ LABELS.get(k, k) }}</dt>
+  <dd>{% if k in ("loc", "cli") %}<code>{{ data[k] }}</code>{% else %}{{ data[k] }}{% endif %}</dd>
+{% endfor %}
+</dl>
+{% endif %}
+{% for k in ns.blocks %}
+<div class="sb-list">
+  <div class="sb-list-h">{{ LABELS.get(k, k) }}</div>
+  <ul>
+  {% if data[k] is mapping %}
+    {% for name, detail in data[k].items() %}<li>{{ name }}{% if detail %}: {{ detail }}{% endif %}</li>{% endfor %}
+  {% else %}
+    {% for item in data[k] %}<li>{{ item }}</li>{% endfor %}
+  {% endif %}
+  </ul>
+</div>
+{% endfor %}
+{% if source %}
+<pre class="sb-code"><code>{{ source }}</code></pre>
+{% endif %}
+{% if not ns.rows and not ns.blocks and not source %}
+<dl><dt>—</dt><dd></dd></dl>
+{% endif %}

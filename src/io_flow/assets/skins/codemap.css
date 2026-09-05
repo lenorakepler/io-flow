@@ -4,7 +4,8 @@
  * whose nodes carry `source`/`code` plus args/returns/calls/... metadata).
  * Loaded via `--skin codemap`, appended AFTER viewer.css so it overrides by the
  * cascade -- it is not a full replacement, so viewer.css stays the single source
- * of truth for everything else. */
+ * of truth for everything else. Pairs with codemap.sidebar.html, which produces
+ * the .sb-list / .sb-code structures styled below. */
 
 /* wider sidebar so source has room */
 #sidebar { width: 460px; }

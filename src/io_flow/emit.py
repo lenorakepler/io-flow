@@ -64,43 +64,56 @@ def elk_omitted(graph: dict[str, Any]) -> bool:
     return (graph.get("_layout") or {}).get("mode") == "restore"
 
 
-SKIN_SUFFIXES = (".css", ".js")
+SKIN_SUFFIXES = (".css", ".js", ".html", ".j2")
+
+# A skin's default sidebar template: `<name>.sidebar.html` (or `.html.j2`)
+# beside `<name>.css`. Unlike `templates/<type>.sidebar.html` it is not keyed by
+# node type -- it is the skin's layout for every node with no type-specific one.
+SIDEBAR_SUFFIXES = (".sidebar.html", ".sidebar.html.j2")
 
 
-def skin_assets(skin: str | Path | list[str | Path] | None) -> tuple[list[Path], list[Path]]:
-    """Resolve skin entries to their (css, js) delta files, in declaration order.
+def skin_assets(
+    skin: str | Path | list[str | Path] | None,
+) -> tuple[list[Path], list[Path], list[Path]]:
+    """Resolve skin entries to their (css, js, sidebar-template) files, in order.
 
-    An entry ending in ``.css``/``.js`` is a project-local file; anything else is
-    a bundled skin name under ``assets/skins`` (both files optional). Skins are
-    layered *on top of* the packaged assets (css appended after viewer.css; js
-    injected right after templates.js), so a skin file holds only its overrides
-    -- no need to fork the whole viewer.css / templates.js."""
+    An entry ending in ``.css``/``.js``/``.sidebar.html`` is a project-local
+    file; anything else is a bundled skin name under ``assets/skins`` (every
+    part optional). Skins are layered *on top of* the packaged assets (css
+    appended after viewer.css; js injected right after templates.js), so a skin
+    file holds only its overrides -- no need to fork the whole viewer.css /
+    templates.js."""
     if not skin:
-        return [], []
+        return [], [], []
     entries = [skin] if isinstance(skin, (str, Path)) else list(skin)
     base = ASSETS / "skins"
     css_paths: list[Path] = []
     js_paths: list[Path] = []
+    sidebar_paths: list[Path] = []
     for entry in entries:
         path = Path(entry)
         if path.suffix in SKIN_SUFFIXES:
             if not path.exists():
                 raise FileNotFoundError(f"skin file not found: {path}")
-            (css_paths if path.suffix == ".css" else js_paths).append(path)
+            bucket = {".css": css_paths, ".js": js_paths}.get(path.suffix, sidebar_paths)
+            bucket.append(path)
             continue
-        css_path, js_path = base / f"{entry}.css", base / f"{entry}.js"
-        if not css_path.exists() and not js_path.exists():
-            available = sorted({p.stem for p in base.glob("*.*")}) if base.exists() else []
+        found = False
+        for suffix, bucket in ((".css", css_paths), (".js", js_paths),
+                               *((s, sidebar_paths) for s in SIDEBAR_SUFFIXES)):
+            candidate = base / f"{entry}{suffix}"
+            if candidate.exists():
+                bucket.append(candidate)
+                found = True
+        if not found:
+            available = sorted({p.name.split(".")[0] for p in base.glob("*.*")}) \
+                if base.exists() else []
             raise FileNotFoundError(
                 f"unknown skin {str(entry)!r}; bundled skins: "
                 f"{', '.join(available) or 'none'} "
-                f"(a project-local skin file needs a .css or .js suffix)"
+                f"(a project-local skin file needs a .css, .js or .sidebar.html suffix)"
             )
-        if css_path.exists():
-            css_paths.append(css_path)
-        if js_path.exists():
-            js_paths.append(js_path)
-    return css_paths, js_paths
+    return css_paths, js_paths, sidebar_paths
 
 
 def build_html(
@@ -114,8 +127,8 @@ def build_html(
     ``css`` / ``templates`` optionally point at project-local files *replacing*
     the packaged ``viewer.css`` / ``templates.js``. ``skin`` is one entry or a
     list of them, *layered on top* in order -- a bundled skin name (e.g.
-    ``codemap``) or a project-local ``.css``/``.js`` file -- so overrides stack
-    without forking the base assets.
+    ``codemap``) or a project-local ``.css``/``.js``/``.sidebar.html`` file --
+    so overrides stack without forking the base assets.
 
     Any of these omitted here fall back to the diagram's own ``style:`` block
     (see the parser), so a YAML can carry its look; an explicit argument
@@ -129,20 +142,25 @@ def build_html(
     if skin is None:
         skin = style.get("skin")
 
-    # `templates` pointing at a *directory* means Jinja `<type>.html` templates:
-    # render them here, ride the result along on each node, and keep shipping the
-    # packaged templates.js as the per-type fallback for untemplated types.
+    # Skin css is appended after the base css, in order, so later entries win.
+    skin_css, skin_js, skin_sidebars = skin_assets(skin)
+
+    # `templates` pointing at a *directory* means Jinja `<type>.html` templates;
+    # a skin may also carry a default sidebar template. Render both here, ride
+    # the results along on each node, and keep shipping the packaged
+    # templates.js as the fallback for whatever has no template.
     from . import jinja_templates
 
-    if jinja_templates.is_template_dir(templates):
-        graph = jinja_templates.prerender(graph, templates)
-        templates = None
+    tpl_dir = templates if jinja_templates.is_template_dir(templates) else None
+    if tpl_dir is not None or skin_sidebars:
+        graph = jinja_templates.prerender(
+            graph, tpl_dir, default_sidebar=skin_sidebars[-1] if skin_sidebars else None
+        )
+        if tpl_dir is not None:
+            templates = None
 
     shell = _read("viewer.html")
     styles = Path(css).read_text(encoding="utf-8") if css else _read("viewer.css")
-
-    # Skin css is appended after the base css, in order, so later entries win.
-    skin_css, skin_js = skin_assets(skin)
     for path in skin_css:
         styles = styles + "\n" + path.read_text(encoding="utf-8")
 

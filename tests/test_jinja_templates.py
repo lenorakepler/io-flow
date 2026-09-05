@@ -93,6 +93,61 @@ def test_sidebar_base_dumps_data_and_takes_block_overrides(tmp_path):
     assert "<dt>loc</dt><dd>queue.py</dd>" in sidebar  # super() kept the generic rows
 
 
+def test_html_j2_suffix_works_everywhere(tmp_path):
+    """`.html.j2` is the spelling editors highlight as Jinja; it must be
+    interchangeable with `.html` for node, sidebar and skin templates -- and
+    `{% extends "_simple.html" %}` must still find the packaged base."""
+    d = tmp_path / "templates"
+    d.mkdir()
+    (d / "queue.html.j2").write_text('{% extends "_simple.html" %}', encoding="utf-8")
+    (d / "queue.sidebar.html.j2").write_text("SIDEBAR", encoding="utf-8")
+    skin = tmp_path / "plain.sidebar.html.j2"
+    skin.write_text("GENERIC", encoding="utf-8")
+    nodes = _embedded(
+        emit.build_html(_graph("queue", "function"), templates=d, skin=str(skin))
+    )
+    assert '<span class="node__badge">queue</span>' in nodes["queue"]["html"]
+    assert nodes["queue"]["sidebar"] == "SIDEBAR"
+    assert nodes["function"]["sidebar"] == "GENERIC"
+
+
+def test_skin_sidebar_template_covers_every_type(tmp_path):
+    """A skin's <name>.sidebar.html is the default sidebar -- no templates dir
+    needed, and it applies to types that named no sidebar template."""
+    skin = tmp_path / "plain.sidebar.html"
+    skin.write_text("<dl><dt>where</dt><dd>{{ data.loc }}</dd></dl>", encoding="utf-8")
+    nodes = _embedded(emit.build_html(_graph("queue", "function"), skin=str(skin)))
+    assert nodes["queue"]["sidebar"] == "<dl><dt>where</dt><dd>queue.py</dd></dl>"
+    assert nodes["function"]["sidebar"].endswith("<dd>function.py</dd></dl>")
+
+
+def test_type_sidebar_template_beats_the_skins_default(tmp_path):
+    skin = tmp_path / "plain.sidebar.html"
+    skin.write_text("GENERIC", encoding="utf-8")
+    d = tmp_path / "templates"
+    d.mkdir()
+    (d / "queue.sidebar.html").write_text("SPECIFIC", encoding="utf-8")
+    nodes = _embedded(
+        emit.build_html(_graph("queue", "function"), templates=d, skin=str(skin))
+    )
+    assert nodes["queue"]["sidebar"] == "SPECIFIC"
+    assert nodes["function"]["sidebar"] == "GENERIC"
+
+
+def test_bundled_codemap_skin_renders_its_sidebar(tmp_path):
+    g = _graph("function")
+    g["nodes"][0]["data"] = {
+        "module": "pkg/mod", "arg_names": ["a", "b"], "source": "def f(a, b):\n    return a",
+        "calls": {"$other": ""},  # edge wiring: never a sidebar row
+    }
+    sidebar = _embedded(emit.build_html(g, skin="codemap"))["function"]["sidebar"]
+    assert "<dt>module</dt>" in sidebar and "<dd>pkg/mod</dd>" in sidebar
+    assert '<div class="sb-list-h">args</div>' in sidebar  # relabeled from arg_names
+    assert "<li>a</li>" in sidebar
+    assert '<pre class="sb-code">' in sidebar and "def f(a, b):" in sidebar
+    assert "xcall" not in sidebar and "<dt>calls</dt>" not in sidebar
+
+
 def test_values_are_autoescaped(tmp_path):
     d = tmp_path / "templates"
     d.mkdir()

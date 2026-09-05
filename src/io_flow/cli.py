@@ -152,7 +152,7 @@ def build_parser() -> argparse.ArgumentParser:
         sp.add_argument(
             "--skin", action="append", metavar="NAME|FILE",
             help="skin layered on top: a bundled name (e.g. 'codemap') or a "
-                 "local .css/.js file (repeatable; layered in order)"
+                 "local .css/.js/.sidebar.html file (repeatable; layered in order)"
         )
 
     b = sub.add_parser("build", help="compile YAML to a single-file diagram.html")
