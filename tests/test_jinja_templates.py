@@ -68,6 +68,31 @@ def test_compound_base_keeps_the_load_bearing_mounts(tmp_path):
     assert 'class="node__header"' in html and 'class="node__children"' in html
 
 
+def test_sidebar_template_is_independent_of_the_body_template(tmp_path):
+    d = tmp_path / "templates"
+    d.mkdir()
+    (d / "queue.sidebar.html").write_text("<dl><dt>at</dt><dd>{{ data.loc }}</dd></dl>",
+                                          encoding="utf-8")
+    nodes = _embedded(emit.build_html(_graph("queue", "function"), templates=d))
+    # Sidebar without a body template: the body still falls back to templates.js.
+    assert nodes["queue"]["sidebar"] == "<dl><dt>at</dt><dd>queue.py</dd></dl>"
+    assert "html" not in nodes["queue"]
+    assert "sidebar" not in nodes["function"]
+
+
+def test_sidebar_base_dumps_data_and_takes_block_overrides(tmp_path):
+    d = tmp_path / "templates"
+    d.mkdir()
+    (d / "queue.sidebar.html").write_text(
+        '{% extends "_sidebar.html" %}{% block rows %}<dt>depth</dt><dd>12</dd>'
+        "{{ super() }}{% endblock %}",
+        encoding="utf-8",
+    )
+    sidebar = _embedded(emit.build_html(_graph("queue"), templates=d))["queue"]["sidebar"]
+    assert "<dt>depth</dt><dd>12</dd>" in sidebar
+    assert "<dt>loc</dt><dd>queue.py</dd>" in sidebar  # super() kept the generic rows
+
+
 def test_values_are_autoescaped(tmp_path):
     d = tmp_path / "templates"
     d.mkdir()

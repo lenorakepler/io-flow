@@ -33,6 +33,9 @@
 
   IOF.renderSidebar = (node) => {
     const data = node.data || {};
+    // A per-type template (`templates/<type>.sidebar.html`) or an IOF.sidebars
+    // entry is more specific than this skin's generic code-map layout.
+    if (node.sidebar != null) return node.sidebar;
     const fn = (IOF.sidebars || {})[node.type];
     if (fn) return fn(node);
 

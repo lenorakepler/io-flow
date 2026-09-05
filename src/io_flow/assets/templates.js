@@ -136,6 +136,8 @@ window.IOFlow = window.IOFlow || {};
 
   IOF.sidebars = sidebars;
   IOF.renderSidebar = (node) => {
+    // Rendered at build time from `templates/<type>.sidebar.html`, if there is one.
+    if (node.sidebar != null) return node.sidebar;
     const fn = sidebars[node.type];
     if (fn) return fn(node);
     const rows = Object.entries(node.data || {})

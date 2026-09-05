@@ -333,10 +333,23 @@ class is set by the engine from `node.type`, and `{{ type }}` inside a template
 is likewise the node's own, so one shared structure renders correct per-type
 classes and badges. Two types sharing a look = two one-line files.
 
+`<type>.sidebar.html` in the same directory does the same for the detail panel,
+independently — a type can have a body template, a sidebar template, both, or
+neither:
+
+```html
+<!-- templates/queue.sidebar.html -->
+{% extends "_sidebar.html" %}                       <!-- every data field as a row -->
+{% block rows %}<dt>depth</dt><dd>{{ data.depth }} waiting</dd>{{ super() }}{% endblock %}
+```
+
+The engine still owns the panel chrome (close button, type tag, title); a type
+with no sidebar template falls through to `IOF.sidebars` and then to the generic
+data dump, and a prerendered sidebar wins over the `codemap` skin's layout.
+
 Template context: `label` (falls back to the id), `id`, `type`, `data` (every
 non-reserved YAML key on the node), `parent`, and the whole `node`. Styling is
-unchanged — write a `.node--<type>` rule in a `style: skin:` stylesheet — and so
-are sidebars: they still come from `IOF.sidebars` / the generic data dump.
+unchanged — write a `.node--<type>` rule in a `style: skin:` stylesheet.
 
 Per-project skins without editing the installed package:
 

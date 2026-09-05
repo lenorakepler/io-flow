@@ -1,0 +1,19 @@
+{# Base: the sidebar detail panel -- every non-empty data field as a row.
+   This is what a type gets by default anyway, so inherit it only to add to it:
+
+       {% extends "_sidebar.html" %}
+       {% block rows %}
+         <dt>depth</dt><dd>{{ data.depth }} waiting</dd>
+         {{ super() }}
+       {% endblock %}
+
+   The engine owns the panel chrome (close button, type tag, title); this is
+   only the detail below it. A type with no `<type>.sidebar.html` falls through
+   to `IOF.sidebars` and then to the generic dump, so sidebars stay optional. #}
+<dl>
+{% block rows %}
+{% for key, value in data.items() if value is not none and value != "" %}
+<dt>{{ key }}</dt><dd>{{ value }}</dd>
+{% endfor %}
+{% endblock %}
+</dl>
