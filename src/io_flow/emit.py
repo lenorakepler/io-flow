@@ -64,38 +64,58 @@ def elk_omitted(graph: dict[str, Any]) -> bool:
     return (graph.get("_layout") or {}).get("mode") == "restore"
 
 
-def _skin_assets(skin: str) -> tuple[Path | None, Path | None]:
-    """Resolve a bundled skin name to its (css, js) delta files (either optional).
+SKIN_SUFFIXES = (".css", ".js")
 
-    A skin is layered *on top of* the packaged assets (css appended after
-    viewer.css; js injected right after templates.js), so a skin file holds only
-    its overrides -- no need to fork the whole viewer.css / templates.js."""
+
+def skin_assets(skin: str | Path | list[str | Path] | None) -> tuple[list[Path], list[Path]]:
+    """Resolve skin entries to their (css, js) delta files, in declaration order.
+
+    An entry ending in ``.css``/``.js`` is a project-local file; anything else is
+    a bundled skin name under ``assets/skins`` (both files optional). Skins are
+    layered *on top of* the packaged assets (css appended after viewer.css; js
+    injected right after templates.js), so a skin file holds only its overrides
+    -- no need to fork the whole viewer.css / templates.js."""
+    if not skin:
+        return [], []
+    entries = [skin] if isinstance(skin, (str, Path)) else list(skin)
     base = ASSETS / "skins"
-    css_path, js_path = base / f"{skin}.css", base / f"{skin}.js"
-    if not css_path.exists() and not js_path.exists():
-        available = sorted(p.stem for p in base.glob("*.css")) if base.exists() else []
-        raise FileNotFoundError(
-            f"unknown skin {skin!r}; bundled skins: {', '.join(available) or 'none'}"
-        )
-    return (css_path if css_path.exists() else None,
-            js_path if js_path.exists() else None)
+    css_paths: list[Path] = []
+    js_paths: list[Path] = []
+    for entry in entries:
+        path = Path(entry)
+        if path.suffix in SKIN_SUFFIXES:
+            if not path.exists():
+                raise FileNotFoundError(f"skin file not found: {path}")
+            (css_paths if path.suffix == ".css" else js_paths).append(path)
+            continue
+        css_path, js_path = base / f"{entry}.css", base / f"{entry}.js"
+        if not css_path.exists() and not js_path.exists():
+            available = sorted({p.stem for p in base.glob("*.*")}) if base.exists() else []
+            raise FileNotFoundError(
+                f"unknown skin {str(entry)!r}; bundled skins: "
+                f"{', '.join(available) or 'none'} "
+                f"(a project-local skin file needs a .css or .js suffix)"
+            )
+        if css_path.exists():
+            css_paths.append(css_path)
+        if js_path.exists():
+            js_paths.append(js_path)
+    return css_paths, js_paths
 
 
 def build_html(
     graph: dict[str, Any],
     css: str | Path | None = None,
     templates: str | Path | None = None,
-    skin: str | None = None,
-    extra_css: list[str | Path] | None = None,
+    skin: str | Path | list[str | Path] | None = None,
 ) -> str:
     """Assemble the single-file HTML.
 
     ``css`` / ``templates`` optionally point at project-local files *replacing*
-    the packaged ``viewer.css`` / ``templates.js``. ``skin`` names a bundled
-    skin (e.g. ``codemap``) *layered on top* -- additive css + a sidebar/JS
-    override -- without forking the base assets. ``extra_css`` is a list of
-    project-local stylesheets *appended after* the base css and any skin css,
-    so they can override selectively without replacing ``viewer.css``.
+    the packaged ``viewer.css`` / ``templates.js``. ``skin`` is one entry or a
+    list of them, *layered on top* in order -- a bundled skin name (e.g.
+    ``codemap``) or a project-local ``.css``/``.js`` file -- so overrides stack
+    without forking the base assets.
 
     Any of these omitted here fall back to the diagram's own ``style:`` block
     (see the parser), so a YAML can carry its look; an explicit argument
@@ -108,19 +128,14 @@ def build_html(
         templates = style.get("templates")
     if skin is None:
         skin = style.get("skin")
-    if extra_css is None:
-        extra_css = style.get("extra_css") or []
 
     shell = _read("viewer.html")
     styles = Path(css).read_text(encoding="utf-8") if css else _read("viewer.css")
 
-    skin_css, skin_js = _skin_assets(skin) if skin else (None, None)
-    if skin_css is not None:
-        styles = styles + "\n" + skin_css.read_text(encoding="utf-8")
-
-    # Additive overrides, appended last so they win the cascade over base + skin.
-    for extra in extra_css:
-        styles = styles + "\n" + Path(extra).read_text(encoding="utf-8")
+    # Skin css is appended after the base css, in order, so later entries win.
+    skin_css, skin_js = skin_assets(skin)
+    for path in skin_css:
+        styles = styles + "\n" + path.read_text(encoding="utf-8")
 
     scripts = []
     for rel in SCRIPT_MANIFEST:
@@ -132,9 +147,12 @@ def build_html(
                 f"engine asset missing: {path} (broken install or manifest drift)"
             )
         scripts.append(f"<script>\n{_safe_script_body(path.read_text(encoding='utf-8'))}\n</script>")
-        # A skin's JS overrides IOF.* right after templates.js, before the engine.
-        if rel == "templates.js" and skin_js is not None:
-            scripts.append(f"<script>\n{_safe_script_body(skin_js.read_text(encoding='utf-8'))}\n</script>")
+        # Skin JS overrides IOF.* right after templates.js, before the engine.
+        if rel == "templates.js":
+            for js_path in skin_js:
+                scripts.append(
+                    f"<script>\n{_safe_script_body(js_path.read_text(encoding='utf-8'))}\n</script>"
+                )
     scripts_html = "\n".join(scripts)
 
     title = graph.get("title") or DEFAULT_TITLE
@@ -153,12 +171,10 @@ def write_html(
     out_path: str | Path,
     css: str | Path | None = None,
     templates: str | Path | None = None,
-    skin: str | None = None,
-    extra_css: list[str | Path] | None = None,
+    skin: str | Path | list[str | Path] | None = None,
 ) -> Path:
     out_path = Path(out_path)
     out_path.write_text(
-        build_html(graph, css=css, templates=templates, skin=skin, extra_css=extra_css),
-        encoding="utf-8",
+        build_html(graph, css=css, templates=templates, skin=skin), encoding="utf-8"
     )
     return out_path

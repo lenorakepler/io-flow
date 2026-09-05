@@ -33,8 +33,7 @@ def cmd_build(args: argparse.Namespace) -> int:
     out = Path(args.output) if args.output else input_path.with_suffix(".html")
     graph = _build_graph(input_path)
     emit.write_html(
-        graph, out, css=args.css, templates=args.templates, skin=args.skin,
-        extra_css=args.extra_css,
+        graph, out, css=args.css, templates=args.templates, skin=args.skin
     )
     slim = " (elkjs omitted: all positions pinned)" if emit.elk_omitted(graph) else ""
     print(f"wrote {out} ({len(graph['nodes'])} nodes, {len(graph['edges'])} edges){slim}")
@@ -48,7 +47,6 @@ def cmd_edit(args: argparse.Namespace) -> int:
     srv = server.LayoutServer(
         input_path, host="127.0.0.1", port=args.port,
         css=args.css, templates=args.templates, skin=args.skin,
-        extra_css=args.extra_css,
     )
     url = srv.url
     if srv.port != args.port:
@@ -150,11 +148,9 @@ def build_parser() -> argparse.ArgumentParser:
             "--templates", help="project-local JS replacing the packaged templates.js"
         )
         sp.add_argument(
-            "--skin", help="bundled skin layered on top (e.g. 'codemap' for walk output)"
-        )
-        sp.add_argument(
-            "--extra-css", action="append", dest="extra_css", metavar="FILE",
-            help="additive stylesheet appended after base/skin css (repeatable)"
+            "--skin", action="append", metavar="NAME|FILE",
+            help="skin layered on top: a bundled name (e.g. 'codemap') or a "
+                 "local .css/.js file (repeatable; layered in order)"
         )
 
     b = sub.add_parser("build", help="compile YAML to a single-file diagram.html")

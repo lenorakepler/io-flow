@@ -113,21 +113,19 @@ class LayoutServer:
         port: int = 8137,
         css: str | Path | None = None,
         templates: str | Path | None = None,
-        skin: str | None = None,
-        extra_css: list[str] | None = None,
+        skin: str | list[str] | None = None,
     ):
         self.input_path = Path(input_path)
         self.host = host
         self.css = css
         self.templates = templates
         self.skin = skin
-        self.extra_css = extra_css
-        # Effective css/templates/extra_css after folding in any YAML `style:`
+        # Effective css/templates/skin files after folding in any YAML `style:`
         # block; refreshed on every rebuild() and watched by version() so
         # editing a diagram-declared theme file live-reloads the browser too.
         self._eff_css = css
         self._eff_templates = templates
-        self._eff_extra_css: list[str] = list(extra_css or [])
+        self._eff_skin_files: list[Path] = []
         self.html = ""
         self.out_path = self.input_path.with_suffix(".html")
         self.rebuild()
@@ -148,7 +146,7 @@ class LayoutServer:
         """Change token for the live-reload poll: newest mtime of the source
         YAML and any skin overrides, so editing those reloads the browser too."""
         newest = 0
-        for p in (self.input_path, self._eff_css, self._eff_templates, *self._eff_extra_css):
+        for p in (self.input_path, self._eff_css, self._eff_templates, *self._eff_skin_files):
             if p is None:
                 continue
             try:
@@ -164,12 +162,10 @@ class LayoutServer:
         style = graph.get("style") or {}
         self._eff_css = self.css if self.css is not None else style.get("css")
         self._eff_templates = self.templates if self.templates is not None else style.get("templates")
-        self._eff_extra_css = (
-            self.extra_css if self.extra_css is not None else (style.get("extra_css") or [])
-        )
+        eff_skin = self.skin if self.skin is not None else style.get("skin")
+        self._eff_skin_files = [p for group in emit.skin_assets(eff_skin) for p in group]
         self.html = emit.build_html(
-            graph, css=self.css, templates=self.templates, skin=self.skin,
-            extra_css=self.extra_css,
+            graph, css=self.css, templates=self.templates, skin=self.skin
         )
         self.out_path.write_text(self.html, encoding="utf-8")
 

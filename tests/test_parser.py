@@ -770,7 +770,7 @@ def test_explicit_type_beats_defaults():
 
 def test_style_block_parsed_and_validated():
     graph = parse({"style": {"skin": "codemap"}, "nodes": {"$a": {}}})
-    assert graph["style"] == {"skin": "codemap"}
+    assert graph["style"] == {"skin": ["codemap"]}
     # Unknown keys are a loud error (typo protection).
     with pytest.raises(ValueError, match="unknown key.*colour"):
         parse({"style": {"colour": "x.css"}, "nodes": {"$a": {}}})
@@ -788,22 +788,24 @@ def test_style_css_path_resolves_relative_to_yaml(tmp_path):
     assert graph["style"]["css"] == str(tmp_path / "theme.css")
 
 
-def test_style_extra_css_list_parsed_and_validated():
-    g = parse({"style": {"extra_css": ["a.css", "b.css"]}, "nodes": {"$a": {}}})
-    assert g["style"]["extra_css"] == ["a.css", "b.css"]
-    # A bare string is coerced to a one-item list.
-    g1 = parse({"style": {"extra_css": "only.css"}, "nodes": {"$a": {}}})
-    assert g1["style"]["extra_css"] == ["only.css"]
+def test_style_skin_list_parsed_and_validated():
+    g = parse({"style": {"skin": ["codemap", "over.css"]}, "nodes": {"$a": {}}})
+    assert g["style"]["skin"] == ["codemap", "over.css"]
     # A non-string entry is a loud error.
-    with pytest.raises(ValueError, match="extra_css"):
-        parse({"style": {"extra_css": [1, 2]}, "nodes": {"$a": {}}})
+    with pytest.raises(ValueError, match="skin"):
+        parse({"style": {"skin": [1, 2]}, "nodes": {"$a": {}}})
 
 
-def test_style_extra_css_paths_resolve_relative_to_yaml(tmp_path):
+def test_style_skin_files_resolve_relative_to_yaml_but_names_dont(tmp_path):
     (tmp_path / "sub").mkdir()
     (tmp_path / "sub" / "x.css").write_text(".n {}", encoding="utf-8")
     (tmp_path / "d.yaml").write_text(
-        "style: {extra_css: [sub/x.css]}\nnodes: {$a: {}}\n", encoding="utf-8"
+        "style: {skin: [codemap, sub/x.css, extra.js]}\nnodes: {$a: {}}\n",
+        encoding="utf-8",
     )
     g = parse_file(tmp_path / "d.yaml")
-    assert g["style"]["extra_css"] == [str(tmp_path / "sub" / "x.css")]
+    assert g["style"]["skin"] == [
+        "codemap",
+        str(tmp_path / "sub" / "x.css"),
+        str(tmp_path / "extra.js"),
+    ]

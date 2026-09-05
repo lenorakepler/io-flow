@@ -81,6 +81,8 @@ from typing import Any
 
 from ruamel.yaml import YAML
 
+from .emit import SKIN_SUFFIXES
+
 SIGIL = "$"
 DEFAULT_TYPE = "node"
 
@@ -201,10 +203,10 @@ def parse_file(path: str | Path) -> dict[str, Any]:
     # Default the HTML title to the source filename; an explicit YAML
     # ``title:`` (set in parse()) takes precedence.
     graph.setdefault("title", f"io-flow: {path.stem}")
-    # Resolve style: css/templates/extra_css paths relative to the YAML's
-    # directory (not the CWD), so `io-flow edit` run from anywhere finds them.
-    # `~` expands; absolute paths pass through. `skin` is a bundled name, not a
-    # path.
+    # Resolve style: paths relative to the YAML's directory (not the CWD), so
+    # `io-flow edit` run from anywhere finds them. `~` expands; absolute paths
+    # pass through. A skin entry without a .css/.js suffix is a bundled name,
+    # not a path, and is left alone.
     style = graph.get("style")
     if style:
         def _resolve(val: str) -> str:
@@ -214,8 +216,11 @@ def parse_file(path: str | Path) -> dict[str, Any]:
         for key in ("css", "templates"):
             if style.get(key):
                 style[key] = _resolve(style[key])
-        if style.get("extra_css"):
-            style["extra_css"] = [_resolve(v) for v in style["extra_css"]]
+        if style.get("skin"):
+            style["skin"] = [
+                _resolve(s) if Path(s).suffix in SKIN_SUFFIXES else s
+                for s in style["skin"]
+            ]
     return graph
 
 
@@ -472,35 +477,36 @@ def parse(data: dict[str, Any]) -> dict[str, Any]:
     diagram = data.get("diagram")
     if isinstance(diagram, dict):
         graph["diagram"] = _plain(diagram)
-    # Optional per-diagram styling: a bundled `skin` name and/or project-local
-    # `css`/`templates` files replacing the packaged assets. Same knobs as the
-    # CLI's --skin/--css/--templates, so a diagram can carry its own look; a
-    # CLI flag still overrides. `css`/`templates` are paths resolved relative
-    # to the YAML file in parse_file (parse() alone has no file to resolve
-    # against). Not passed to the viewer -- consumed by emit at build time.
+    # Optional per-diagram styling: `skin` entries layered on top and/or
+    # project-local `css`/`templates` files replacing the packaged assets. Same
+    # knobs as the CLI's --skin/--css/--templates, so a diagram can carry its
+    # own look; a CLI flag still overrides. Paths are resolved relative to the
+    # YAML file in parse_file (parse() alone has no file to resolve against).
+    # Not passed to the viewer -- consumed by emit at build time.
     style = data.get("style")
     if style is not None:
         if not isinstance(style, dict):
-            raise ValueError("style: must be a mapping of css/templates/skin/extra_css")
-        unknown = set(map(str, style)) - {"css", "templates", "skin", "extra_css"}
+            raise ValueError("style: must be a mapping of css/templates/skin")
+        unknown = set(map(str, style)) - {"css", "templates", "skin"}
         if unknown:
             raise ValueError(
                 f"style: unknown key(s) {', '.join(sorted(unknown))}; "
-                f"expected css, templates, skin, extra_css"
+                f"expected css, templates, skin"
             )
-        style_out = {k: str(style[k]) for k in ("css", "templates", "skin") if style.get(k) is not None}
-        # extra_css is additive: a single path or a list of them, appended after
-        # the base/skin css so they override selectively (see emit.build_html).
-        extra = style.get("extra_css")
-        if extra is not None:
-            if isinstance(extra, str):
-                extra = [extra]
-            if not isinstance(extra, list) or not all(isinstance(x, str) for x in extra):
+        style_out = {k: str(style[k]) for k in ("css", "templates") if style.get(k) is not None}
+        # skin: one entry or a list, layered in order. A bare name is a bundled
+        # skin; an entry ending .css/.js is a project-local file (see
+        # emit.skin_assets).
+        skin = style.get("skin")
+        if skin is not None:
+            if isinstance(skin, str):
+                skin = [skin]
+            if not isinstance(skin, list) or not all(isinstance(x, str) for x in skin):
                 raise ValueError(
-                    "style.extra_css: must be a CSS path or a list of CSS paths"
+                    "style.skin: must be a skin name/file or a list of them"
                 )
-            if extra:
-                style_out["extra_css"] = [str(x) for x in extra]
+            if skin:
+                style_out["skin"] = list(skin)
         if style_out:
             graph["style"] = style_out
     return graph

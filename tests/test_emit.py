@@ -77,24 +77,38 @@ def test_yaml_style_block_drives_build(tmp_path):
     assert "style" not in json.loads(body)
 
 
-def test_extra_css_appends_and_keeps_base(tmp_path):
+def test_local_skin_files_append_and_keep_base(tmp_path):
     one = tmp_path / "a.css"
     one.write_text("/* EXTRA-A */", encoding="utf-8")
     two = tmp_path / "b.css"
     two.write_text("/* EXTRA-B */", encoding="utf-8")
-    html = emit.build_html(_graph(), extra_css=[str(one), str(two)])
-    # Base viewer.css is NOT replaced (unlike css=), and both extras are present.
+    js = tmp_path / "s.js"
+    js.write_text("/* EXTRA-JS */", encoding="utf-8")
+    html = emit.build_html(_graph(), skin=[str(one), str(two), str(js)])
+    # Base viewer.css is NOT replaced (unlike css=), and every entry is present.
     assert "--header-h" in html  # a distinctive base viewer.css token survived
-    assert "/* EXTRA-A */" in html and "/* EXTRA-B */" in html
+    assert "/* EXTRA-JS */" in html
     # Appended in order, after the base css.
     assert html.index("/* EXTRA-A */") < html.index("/* EXTRA-B */")
+    # Skin JS lands after templates.js, before the engine bootstrap.
+    assert html.index("/* EXTRA-JS */") < html.index("engine/viewer.js")
 
 
-def test_extra_css_from_yaml_style(tmp_path):
-    extra = tmp_path / "ov.css"
-    extra.write_text("/* YAML-EXTRA */", encoding="utf-8")
-    html = emit.build_html(_graph(style={"extra_css": [str(extra)]}))
+def test_bundled_skin_name_and_local_file_layer_together(tmp_path):
+    over = tmp_path / "ov.css"
+    over.write_text("/* YAML-EXTRA */", encoding="utf-8")
+    html = emit.build_html(_graph(style={"skin": ["codemap", str(over)]}))
     assert "/* YAML-EXTRA */" in html
+    # Bundled codemap css came first, the local override after it.
+    assert html.index("io-flow bundled skin: code-map") < html.index("/* YAML-EXTRA */")
+
+
+def test_unknown_skin_name_errors(tmp_path):
+    with pytest.raises(FileNotFoundError, match="unknown skin 'nope'"):
+        emit.build_html(_graph(), skin="nope")
+    # A suffixed entry is a path, so a missing one reports as a missing file.
+    with pytest.raises(FileNotFoundError, match="skin file not found"):
+        emit.build_html(_graph(), skin=str(tmp_path / "gone.css"))
 
 
 def test_cli_arg_overrides_yaml_style(tmp_path):

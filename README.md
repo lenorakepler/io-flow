@@ -296,10 +296,13 @@ Per-project skins without editing the installed package:
 io-flow build pipeline.yaml --css my_skin.css --templates my_templates.js
 ```
 
-`--css`/`--templates` *replace* the packaged files. `--skin <name>` instead
-*layers* a bundled skin on top — its CSS is appended after `viewer.css` and its
-JS injected right after `templates.js` — so a skin holds only its overrides. The
-bundled `codemap` skin (`assets/skins/codemap.{css,js}`) renders a node's
+`--css`/`--templates` *replace* the packaged files. `--skin` instead *layers* a
+skin on top — its CSS is appended after `viewer.css` and its JS injected right
+after `templates.js` — so a skin holds only its overrides. A skin entry is
+either a **bundled name** (no suffix, e.g. `codemap`, loading
+`assets/skins/codemap.{css,js}`) or a **project-local `.css`/`.js` file**; the
+flag is repeatable and entries layer in order. The bundled `codemap` skin
+renders a node's
 `source`/`code` as a `<pre>` and its `args`/`returns`/`calls`/`modifies`/
 `attributes`/`bases` as labeled lists — the sidebar for `io-flow walk` output:
 
@@ -312,24 +315,24 @@ don't repeat the flags on every `build`/`edit`:
 
 ```yaml
 style:
-  skin: codemap        # bundled skin name
+  skin:                # one entry or a list, layered in order
+    - codemap          #   no suffix = bundled skin name
+    - skin/overrides.css   #   .css/.js = local file, relative to THIS yaml
+    - skin/sidebar.js
   css: theme.css       # path, resolved relative to THIS yaml file (replaces viewer.css)
   templates: nodes.js  # path, resolved relative to THIS yaml file (replaces templates.js)
-  extra_css:           # additive: appended after base + skin css, so they override selectively
-    - skin/overrides.css
 ```
 
-`css:`/`templates:` *replace* the packaged file; `extra_css:` (a path or list
-of paths) is *additive* — appended last so it wins the cascade without you
-having to fork `viewer.css`. Use `extra_css` when you only have a few overrides,
-`css` when you're providing a whole stylesheet.
+`css:`/`templates:` *replace* the packaged file; `skin:` is *additive* — each
+entry appended after the base (and after earlier entries), so it wins the
+cascade without you having to fork `viewer.css`. Use a skin entry when you have
+a few overrides, `css` when you're providing a whole stylesheet.
 
-Same knobs as `--skin`/`--css`/`--templates`/`--extra-css` (`--extra-css` is
-repeatable), and a CLI flag still wins
-over the block (handy for a one-off). Because `css`/`templates` resolve against
-the YAML's own directory, `io-flow edit` finds them no matter which directory
-you run from — and under `edit`, editing a `style:`-declared CSS file live-
-reloads the browser just like editing the YAML.
+Same knobs as `--skin`/`--css`/`--templates`, and a CLI flag still wins over the
+block (handy for a one-off). Because paths resolve against the YAML's own
+directory, `io-flow edit` finds them no matter which directory you run from —
+and under `edit`, editing a `style:`-declared CSS or JS file live-reloads the
+browser just like editing the YAML.
 
 **How much CSS controls.** Node *size* is genuinely CSS-owned: before layout,
 the engine measures each rendered node from the DOM (after fonts settle), so
