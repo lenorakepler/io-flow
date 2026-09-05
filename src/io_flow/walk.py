@@ -19,7 +19,9 @@ Structure of the emitted YAML:
 io-flow reserves ``args``/``calls``/``returns`` as relation (edge) keys and
 requires them dict-shaped, so the *display* metadata is emitted under safe keys
 (``arg_names``/``return_exprs``/``callees``/...); a code-aware sidebar skin
-labels them Args / Returns / Calls.
+labels them Args / Returns / Calls. The emitted YAML declares
+``style: {skin: codemap}`` so ``io-flow build`` picks that sidebar up with no
+``--skin`` flag.
 
 Driven by the ``io-flow walk`` subcommand (see cli.py). Depends only on the
 stdlib and ruamel (already an io-flow dependency).
@@ -297,7 +299,10 @@ def build_doc(syms: list[dict], title: str, no_edges: bool = False) -> tuple[dic
 
     nodes = {f"${unit}": g for unit, g in sorted(groups.items())}
 
-    doc = {"title": title}
+    # Self-skin: walk output is designed for the bundled `codemap` sidebar, so
+    # declare it in the YAML. `io-flow build/edit <walked>.yaml` then renders it
+    # right with no `--skin codemap` flag (a CLI flag still overrides).
+    doc = {"title": title, "style": {"skin": "codemap"}}
     if not no_edges:
         # cross-file call (calls is built-in); no edges emitted -> no xcall usage
         doc["relations"] = {"xcall": {"direction": "out"}}

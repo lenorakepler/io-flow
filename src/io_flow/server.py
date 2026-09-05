@@ -114,12 +114,20 @@ class LayoutServer:
         css: str | Path | None = None,
         templates: str | Path | None = None,
         skin: str | None = None,
+        extra_css: list[str] | None = None,
     ):
         self.input_path = Path(input_path)
         self.host = host
         self.css = css
         self.templates = templates
         self.skin = skin
+        self.extra_css = extra_css
+        # Effective css/templates/extra_css after folding in any YAML `style:`
+        # block; refreshed on every rebuild() and watched by version() so
+        # editing a diagram-declared theme file live-reloads the browser too.
+        self._eff_css = css
+        self._eff_templates = templates
+        self._eff_extra_css: list[str] = list(extra_css or [])
         self.html = ""
         self.out_path = self.input_path.with_suffix(".html")
         self.rebuild()
@@ -140,7 +148,7 @@ class LayoutServer:
         """Change token for the live-reload poll: newest mtime of the source
         YAML and any skin overrides, so editing those reloads the browser too."""
         newest = 0
-        for p in (self.input_path, self.css, self.templates):
+        for p in (self.input_path, self._eff_css, self._eff_templates, *self._eff_extra_css):
             if p is None:
                 continue
             try:
@@ -152,7 +160,17 @@ class LayoutServer:
     def rebuild(self) -> None:
         graph = parse_file(self.input_path)
         layout_store.annotate_graph(graph, self.input_path)
-        self.html = emit.build_html(graph, css=self.css, templates=self.templates, skin=self.skin)
+        # CLI flags win over the diagram's own style: block (mirrors emit).
+        style = graph.get("style") or {}
+        self._eff_css = self.css if self.css is not None else style.get("css")
+        self._eff_templates = self.templates if self.templates is not None else style.get("templates")
+        self._eff_extra_css = (
+            self.extra_css if self.extra_css is not None else (style.get("extra_css") or [])
+        )
+        self.html = emit.build_html(
+            graph, css=self.css, templates=self.templates, skin=self.skin,
+            extra_css=self.extra_css,
+        )
         self.out_path.write_text(self.html, encoding="utf-8")
 
     def save(

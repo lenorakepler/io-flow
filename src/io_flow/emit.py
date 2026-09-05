@@ -86,20 +86,41 @@ def build_html(
     css: str | Path | None = None,
     templates: str | Path | None = None,
     skin: str | None = None,
+    extra_css: list[str | Path] | None = None,
 ) -> str:
     """Assemble the single-file HTML.
 
     ``css`` / ``templates`` optionally point at project-local files *replacing*
     the packaged ``viewer.css`` / ``templates.js``. ``skin`` names a bundled
     skin (e.g. ``codemap``) *layered on top* -- additive css + a sidebar/JS
-    override -- without forking the base assets.
+    override -- without forking the base assets. ``extra_css`` is a list of
+    project-local stylesheets *appended after* the base css and any skin css,
+    so they can override selectively without replacing ``viewer.css``.
+
+    Any of these omitted here fall back to the diagram's own ``style:`` block
+    (see the parser), so a YAML can carry its look; an explicit argument
+    (typically a CLI flag) always wins.
     """
+    style = graph.get("style") or {}
+    if css is None:
+        css = style.get("css")
+    if templates is None:
+        templates = style.get("templates")
+    if skin is None:
+        skin = style.get("skin")
+    if extra_css is None:
+        extra_css = style.get("extra_css") or []
+
     shell = _read("viewer.html")
     styles = Path(css).read_text(encoding="utf-8") if css else _read("viewer.css")
 
     skin_css, skin_js = _skin_assets(skin) if skin else (None, None)
     if skin_css is not None:
         styles = styles + "\n" + skin_css.read_text(encoding="utf-8")
+
+    # Additive overrides, appended last so they win the cascade over base + skin.
+    for extra in extra_css:
+        styles = styles + "\n" + Path(extra).read_text(encoding="utf-8")
 
     scripts = []
     for rel in SCRIPT_MANIFEST:
@@ -119,7 +140,10 @@ def build_html(
     title = graph.get("title") or DEFAULT_TITLE
     out = shell.replace("/*__STYLES__*/", styles)
     out = out.replace("<!--__TITLE__-->", html.escape(str(title)))
-    out = out.replace("/*__GRAPH__*/", _inline_json(graph))
+    # `style` is a build-time concern (and holds local filesystem paths); keep
+    # it out of the viewer JSON embedded in the artifact.
+    graph_json = {k: v for k, v in graph.items() if k != "style"} if "style" in graph else graph
+    out = out.replace("/*__GRAPH__*/", _inline_json(graph_json))
     out = out.replace("<!--__SCRIPTS__-->", scripts_html)
     return out
 
@@ -130,7 +154,11 @@ def write_html(
     css: str | Path | None = None,
     templates: str | Path | None = None,
     skin: str | None = None,
+    extra_css: list[str | Path] | None = None,
 ) -> Path:
     out_path = Path(out_path)
-    out_path.write_text(build_html(graph, css=css, templates=templates, skin=skin), encoding="utf-8")
+    out_path.write_text(
+        build_html(graph, css=css, templates=templates, skin=skin, extra_css=extra_css),
+        encoding="utf-8",
+    )
     return out_path
