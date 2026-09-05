@@ -129,6 +129,15 @@ def build_html(
     if skin is None:
         skin = style.get("skin")
 
+    # `templates` pointing at a *directory* means Jinja `<type>.html` templates:
+    # render them here, ride the result along on each node, and keep shipping the
+    # packaged templates.js as the per-type fallback for untemplated types.
+    from . import jinja_templates
+
+    if jinja_templates.is_template_dir(templates):
+        graph = jinja_templates.prerender(graph, templates)
+        templates = None
+
     shell = _read("viewer.html")
     styles = Path(css).read_text(encoding="utf-8") if css else _read("viewer.css")
 

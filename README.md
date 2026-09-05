@@ -290,6 +290,54 @@ touching engine code:
   generic dump of their data keys). Adding a node type = one function here +
   one CSS rule.
 
+### Adding a node type without writing JavaScript
+
+Point `--templates` (or `style: templates:`) at a **directory** instead of a
+`.js` file and each `<type>.html` in it becomes that type's template — plain
+HTML with `{{ }}`, rendered by Jinja in Python at build time:
+
+```
+my-diagram.yaml
+templates/
+  queue.html
+```
+```html
+<!-- templates/queue.html — the whole thing -->
+<div class="node__title">{{ label }} <span class="node__badge">queue</span></div>
+{% if data.depth %}<div class="node__meta">{{ data.depth }} waiting</div>{% endif %}
+```
+
+The filename is the registration — no map, no closure, and values are
+autoescaped, so there is no `esc()` to forget. A type with **no** `<type>.html`
+falls through to the packaged `templates.js`, so the two surfaces mix freely and
+you can convert one type at a time. Nodes are rendered once at mount, so baking
+the HTML in at build time loses nothing and ships no template engine in the
+artifact.
+
+Reuse is Jinja inheritance. A new type that looks like an existing one is a
+one-line file:
+
+```html
+{% extends "_simple.html" %}                        <!-- title + type badge -->
+```
+```html
+{% extends "_compound.html" %}                      <!-- a node holding children -->
+{% block header %}<span class="node__title">{{ label }}</span>{% endblock %}
+```
+
+`_simple.html` and `_compound.html` ship with io-flow (a template of your own
+with that name shadows it); `_compound.html` also documents the four
+non-obvious CSS rules a compound node needs. **Names come from the node's own
+type, never from the template it inherited** — the wrapper's `node--<type>`
+class is set by the engine from `node.type`, and `{{ type }}` inside a template
+is likewise the node's own, so one shared structure renders correct per-type
+classes and badges. Two types sharing a look = two one-line files.
+
+Template context: `label` (falls back to the id), `id`, `type`, `data` (every
+non-reserved YAML key on the node), `parent`, and the whole `node`. Styling is
+unchanged — write a `.node--<type>` rule in a `style: skin:` stylesheet — and so
+are sidebars: they still come from `IOF.sidebars` / the generic data dump.
+
 Per-project skins without editing the installed package:
 
 ```bash
@@ -320,7 +368,8 @@ style:
     - skin/overrides.css   #   .css/.js = local file, relative to THIS yaml
     - skin/sidebar.js
   css: theme.css       # path, resolved relative to THIS yaml file (replaces viewer.css)
-  templates: nodes.js  # path, resolved relative to THIS yaml file (replaces templates.js)
+  templates: templates/  # a dir of <type>.html Jinja templates (see above),
+                         # or a .js file replacing templates.js
 ```
 
 `css:`/`templates:` *replace* the packaged file; `skin:` is *additive* — each

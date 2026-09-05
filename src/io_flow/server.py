@@ -149,10 +149,15 @@ class LayoutServer:
         for p in (self.input_path, self._eff_css, self._eff_templates, *self._eff_skin_files):
             if p is None:
                 continue
-            try:
-                newest = max(newest, Path(p).stat().st_mtime_ns)
-            except OSError:
-                continue
+            path = Path(p)
+            # A directory's own mtime doesn't move when a file inside it is
+            # edited, so a Jinja templates/ dir has to be watched file by file.
+            watched = sorted(path.glob("*.html")) if path.is_dir() else [path]
+            for f in watched:
+                try:
+                    newest = max(newest, f.stat().st_mtime_ns)
+                except OSError:
+                    continue
         return newest
 
     def rebuild(self) -> None:

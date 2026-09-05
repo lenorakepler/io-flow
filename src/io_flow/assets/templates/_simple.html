@@ -1,0 +1,17 @@
+{# Base: a plain node -- title, type badge, optional meta line.
+
+   A new type that looks like this is a one-line file:
+
+       {% extends "_simple.html" %}
+
+   Override a piece without restating the rest:
+
+       {% extends "_simple.html" %}
+       {% block meta %}<div class="node__meta">{{ data.depth }} waiting</div>{% endblock %}
+
+   `type` is the NODE's own type, not this file's, so an inherited template
+   still renders the right badge -- and the engine sets the wrapper's
+   `node--<type>` class from the node too. Style a type with a `.node--<type>`
+   rule in your `style: skin:` css. #}
+<div class="node__title">{% block title %}{{ label }}{% endblock %}{% block badge %} <span class="node__badge">{{ type }}</span>{% endblock %}</div>
+{% block meta %}{% endblock %}

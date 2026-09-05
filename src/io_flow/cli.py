@@ -145,7 +145,9 @@ def build_parser() -> argparse.ArgumentParser:
     def add_skin_flags(sp):
         sp.add_argument("--css", help="project-local CSS replacing the packaged viewer.css")
         sp.add_argument(
-            "--templates", help="project-local JS replacing the packaged templates.js"
+            "--templates",
+            help="project-local JS replacing the packaged templates.js, or a "
+                 "directory of <type>.html Jinja node templates"
         )
         sp.add_argument(
             "--skin", action="append", metavar="NAME|FILE",

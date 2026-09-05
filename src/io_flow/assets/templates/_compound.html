@@ -1,0 +1,24 @@
+{# Base: a compound node -- one that holds children.
+
+       {% extends "_compound.html" %}
+       {% block header %}<span class="node__title">{{ label }}</span>{% endblock %}
+
+   Both divs below are load-bearing, and neither failure is loud:
+     .node__header    -- engine/collapse.js only wires a collapse toggle when a
+                         node has one; without it the node just never collapses.
+     .node__children  -- where the engine mounts child nodes. Omit it and the
+                         engine appends its own at the end, which is usually
+                         *not* where you wanted it.
+
+   The matching CSS is not guessable either -- children are positioned by ELK
+   relative to this node's origin, so the wrapper must not pad or cap them:
+
+       .node--TYPE                  { padding: 0; max-width: none; }
+       .node--TYPE > .node__header  { position: absolute; top: 0; left: 0; right: 0;
+                                      height: var(--header-h); }
+       .node--TYPE > .node__children{ position: absolute; inset: 0; }
+
+   (`--header-h` is the single source of truth for header height -- layout
+   padding, drag clamping and collapse all read it. Don't hardcode it.) #}
+<div class="node__header">{% block header %}<span class="node__title">{{ label }}</span>{% if data.loc %}<span class="node__meta">{{ data.loc }}</span>{% endif %}{% endblock %}</div>
+<div class="node__children"></div>

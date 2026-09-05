@@ -98,7 +98,11 @@ window.IOFlow = window.IOFlow || {};
   };
 
   IOF.templates = templates;
-  IOF.renderNode = (node) => (templates[node.type] || templates.node)(node);
+  // A node carrying `html` was rendered at build time from a Jinja
+  // `templates/<type>.html` file (see io_flow/jinja_templates.py); everything
+  // else falls through to the map above.
+  IOF.renderNode = (node) =>
+    node.html != null ? node.html : (templates[node.type] || templates.node)(node);
 
   /* ---- Sidebar templates — USER-EDITABLE ----------------------------------
    *
