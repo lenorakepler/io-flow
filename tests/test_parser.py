@@ -9,6 +9,7 @@ import pytest
 
 from io_flow.parser import (
     UnmarkedReferenceWarning,
+    UnusedDefaultWarning,
     UnresolvedReferenceWarning,
     parse,
     parse_file,
@@ -775,6 +776,53 @@ def test_defaults_chain_through_defaulted_parents():
     assert _node(graph, "outer")["type"] == "group"
     assert _node(graph, "inner")["type"] == "group"
     assert _node(graph, "leaf")["type"] == "group"
+
+
+def test_childtype_types_a_type_s_untyped_children():
+    """The `defaults:` mapping, said in the declaration that owns it."""
+    graph = parse(
+        {
+            "types": {
+                "dir": {"extends": "group", "childtype": "dir"},
+                "vault": {"extends": "dir"},  # inherited like any other field
+            },
+            "nodes": {
+                "$projects": {"type": "dir", "$prj1": {}, "$prj2": {"type": "file"}},
+                "$v": {"type": "vault", "$inner": {}},
+            },
+        }
+    )
+    assert _node(graph, "prj1")["type"] == "dir"
+    assert _node(graph, "prj2")["type"] == "file"  # explicit type still wins
+    assert _node(graph, "inner")["type"] == "dir"
+
+
+def test_defaults_beats_childtype():
+    """`defaults:` is this diagram overriding a shared declaration."""
+    graph = parse(
+        {
+            "types": {"dir": {"childtype": "dir"}},
+            "defaults": {"dir": "file"},
+            "nodes": {"$d": {"type": "dir", "$kid": {}}},
+        }
+    )
+    assert _node(graph, "kid")["type"] == "file"
+
+
+def test_defaults_key_that_names_a_node_warns():
+    """`projects: dir` reads right and does nothing; keys are parent types."""
+    doc = {
+        "defaults": {"projects": "dir"},
+        "nodes": {"$projects": {"type": "dir", "$prj1": {}}},
+    }
+    with pytest.warns(UnusedDefaultWarning, match=r"\$projects is a node name"):
+        graph = parse(doc)
+    assert _node(graph, "prj1")["type"] == "node"  # unchanged: the key never applied
+    # The type-keyed version is silent, and works.
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        fixed = parse({**doc, "defaults": {"dir": "dir"}})
+    assert _node(fixed, "prj1")["type"] == "dir"
 
 
 def test_explicit_type_beats_defaults():

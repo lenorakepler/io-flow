@@ -48,6 +48,7 @@ CSS is unchanged: style a type with a ``.node--<type>`` rule via ``style: skin:`
 
 from __future__ import annotations
 
+import warnings
 from pathlib import Path
 from typing import Any
 
@@ -101,6 +102,10 @@ def template_key(name: str) -> str | None:
 
 
 TYPES_FILE = "types.yaml"
+
+
+class UnappliedChildTypeWarning(UserWarning):
+    """``childtype:`` declared where the parser cannot see it (see prerender)."""
 
 
 def load_types(
@@ -250,6 +255,23 @@ def prerender(
                 have[key] = entry.name
 
     types = load_types(directory, graph.get("types"))
+
+    # `childtype:` is applied by the parser, which runs before a project's
+    # templates/ dir is even known, so one declared there would silently do
+    # nothing. Say so rather than letting it look applied.
+    if directory is not None:
+        project_only = load_types(directory)
+        packaged = load_types(None)
+        for name, spec in project_only.items():
+            if (spec or {}).get("childtype") and (packaged.get(name) or {}) != spec:
+                warnings.warn(
+                    f"{directory / TYPES_FILE}: {name}.childtype is not applied -- "
+                    f"node types are resolved before this file is read. Move the "
+                    f"declaration into the diagram's own `types:` block "
+                    f"(or use `defaults: {{{name}: <child type>}}`).",
+                    UnappliedChildTypeWarning,
+                    stacklevel=2,
+                )
 
     # `fields` is a node's own data: everything except the reserved keys and
     # the relation blocks, which are wiring the viewer already draws as edges.

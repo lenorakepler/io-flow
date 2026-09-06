@@ -15,6 +15,11 @@
 #             override. `node` and `group` are ordinary types; extend them too.
 #             Omit it and a node with children renders through group.html
 #             anyway -- structure is inferred, the group *look* is not.
+#   childtype: what this type's untyped children are (`dir` holding `dir`s).
+#             Inherited like any other field; a `defaults:` entry overrides it.
+#             Read by the parser, so it only counts in the packaged types or a
+#             diagram's own `types:` block -- not a project templates/ dir,
+#             which is read after types are assigned (you get a warning).
 #   class:    extra CSS classes, without inheriting anything else
 #   css:      properties for this type, wrapped in `.node--<type> { ... }`;
 #             a block that writes its own selectors is emitted verbatim

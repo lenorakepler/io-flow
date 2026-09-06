@@ -189,6 +189,18 @@ def test_the_styling_example_still_demonstrates_what_it_claims(tmp_path):
     assert quoted > 40  # and that they didn't quietly disappear
 
 
+def test_childtype_in_a_project_types_file_warns(tmp_path):
+    """The parser has already assigned types by the time this file is read."""
+    d = tmp_path / "templates"
+    d.mkdir()
+    (d / "types.yaml").write_text("dir: {childtype: dir}\n", encoding="utf-8")
+    src = tmp_path / "d.yaml"
+    src.write_text("nodes: {$d: {type: dir, $kid: {}}}\n", encoding="utf-8")
+    with pytest.warns(jinja_templates.UnappliedChildTypeWarning, match="dir.childtype"):
+        nodes = _embedded(emit.build_html(parse_file(src), templates=d))
+    assert nodes["kid"]["type"] == "node"  # and it really did not apply
+
+
 def test_css_field_is_emitted_scoped_to_the_type(tmp_path):
     src = tmp_path / "d.yaml"
     src.write_text(

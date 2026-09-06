@@ -107,6 +107,10 @@ class UnmarkedReferenceWarning(UserWarning):
     """An unmarked literal in a relation block exactly matches a node id."""
 
 
+class UnusedDefaultWarning(UserWarning):
+    """A ``defaults:`` key matched no parent type (usually a node name)."""
+
+
 # Built-in relation kinds: name -> direction.
 #
 # "in":  data flows from the referenced node INTO the owner
@@ -247,9 +251,28 @@ def parse(data: dict[str, Any]) -> dict[str, Any]:
     if not isinstance(defaults, dict):
         raise ValueError(f"defaults: must be a mapping of parent type -> child type")
 
+    # A type may say what its untyped children are: `childtype:` in the
+    # declaration, which beats the structural fallback and loses to an explicit
+    # `defaults:` entry (that is the diagram overriding a shared declaration).
+    # Read from the packaged types plus this document's own `types:` block --
+    # a project templates/ dir is loaded later, at render time, so a
+    # `childtype:` declared there is reported below rather than ignored.
+    from . import jinja_templates  # local: jinja_templates imports this module
+
+    declarations = jinja_templates.load_types(None, data.get("types"))
+
+    def child_type(parent_type: str | None) -> str | None:
+        if parent_type is None or parent_type not in declarations:
+            return None
+        fields, _classes = jinja_templates.resolve_type(parent_type, declarations)
+        value = fields.get("childtype")
+        return str(value) if value is not None else None
+
     def default_type(parent_type: str | None, fallback: str = DEFAULT_TYPE) -> str:
         key = parent_type if parent_type is not None else "_root"
-        return str(defaults.get(key, fallback))
+        if key in defaults:
+            return str(defaults[key])
+        return child_type(parent_type) or fallback
 
     # Reference sites recorded during the walk and resolved in pass 2.
     # Each entry: (owner_node_id, edge_type, ref, annotation, context_key)
@@ -403,6 +426,24 @@ def parse(data: dict[str, Any]) -> dict[str, Any]:
                 f"declarations ({SIGIL}{key}); there is no node to attach data to"
             )
         add_node(_strip(key), spec, None, None)
+
+    # `defaults:` keys are parent *types*; writing a node name there (the
+    # tempting reading of `projects: dir`) is a silent no-op otherwise.
+    in_play = {n["type"] for n in nodes} | {"_root"}
+    for key in defaults:
+        if str(key) not in in_play:
+            hint = (
+                f" -- {SIGIL}{key} is a node name; use its type"
+                if str(key) in seen
+                else ""
+            )
+            warnings.warn(
+                f"defaults: {key!r} is not the type of any node in this document, "
+                f"so it never applies. Keys are the *parent's type* (or '_root' "
+                f"for top-level nodes){hint}.",
+                UnusedDefaultWarning,
+                stacklevel=2,
+            )
 
     # --- Pass 2: resolve reference sites into edges ---------------------------
     node_ids = set(seen)

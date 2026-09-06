@@ -267,9 +267,20 @@ default (`_root` covers top-level nodes), so terse declarations stay correct:
 
 ```yaml
 defaults:
-  class: method
+  class: method            # children of any `type: class` node
   group: function
-  _root: input
+  _root: input             # top-level nodes
+```
+
+**Keys are the parent's *type*, not a node name.** `projects: dir` does not
+mean "children of `$projects`" — it means "children of anything typed
+`projects`", and a key matching no type in the document warns rather than
+quietly doing nothing. A type that always holds its own kind says so in its
+declaration instead, which inherits and travels with the type:
+
+```yaml
+types:
+  dir: {extends: group, childtype: dir}   # a dir's untyped children are dirs
 ```
 
 **Ordered children.** A pipeline's stages are a list, not eight nodes that each
@@ -398,6 +409,7 @@ write is markup; `{{ values }}` are escaped.
 | field | does |
 |---|---|
 | `extends` | another type — inherits its fields, its template and its CSS class. `node` and `group` are ordinary types you can extend like any other |
+| `childtype` | what this type's untyped children are — `dir` holding `dir`s. Inherited like any other field; a `defaults:` entry overrides it. Read by the parser, so it counts in a diagram's own `types:` block (or the packaged ones), **not** in a project `templates/types.yaml` — that file is read after node types are assigned, and declaring it there warns |
 | `class` | extra CSS classes on the node, inheriting nothing else |
 | `css` | properties for this type, wrapped in `.node--<type> { … }` — or a block with its own selectors, emitted as written |
 | `title` | the name line (default `{{ label }}`) |
