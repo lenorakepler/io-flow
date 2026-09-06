@@ -507,6 +507,29 @@ It lands last on the wrapper, after everything the type contributed, and it is
 a reserved key like `type:` and `label:` — styling for this one node, so it
 doesn't show up in `fields`.
 
+#### Re-pointing a variable instead of restating a rule
+
+`viewer.css` colors each built-in type through a variable (`--file`, `--method`,
+`--group`, …). A `css:` block can redefine one for its own type, and every rule
+that reads it follows — no rule gets copied:
+
+```yaml
+types:
+  python-file: {extends: file, css: "--file: #3572A5;"}
+  yaml-file:   {extends: file, css: "--file: #cb171e;"}
+```
+
+Both come out as `.node--<type> { --file: … }`. `extends: file` puts
+`node--file` on the wrapper, so `.node--file`'s border rule — which resolves
+`var(--file)` *on the node itself* — picks up the local value, and the badge
+rule resolves it on the badge, which inherits `--file` from the node. Border and
+badge recolor together from one line.
+
+The scope is that node and its descendants: nothing outside the subtree
+(edges, the sidebar) sees the override. `--header-h` is the one to leave alone
+— `IOF.headerH()` reads it off `:root` for layout math, so a per-type override
+changes the bar you see but not the space ELK reserved for it.
+
 Omit `extends` and the template follows the node: `group.html` when something
 is parented to it, `node.html` otherwise — compound-ness is a state, not a type.
 That gives structure without the group *look*, since no class is inherited. So
