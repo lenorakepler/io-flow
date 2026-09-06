@@ -228,26 +228,36 @@ window.IOFlow = window.IOFlow || {};
   // always comes from state.pos (edges.js). An edge entirely inside one
   // stack drops out of the elk graph but still renders.
   function elkEdges(graph, stackRoots) {
-    const all = graph.edges.map((e, i) => ({
-      id: "edge_" + i,
-      sources: [e.source],
-      targets: [e.target],
-    }));
-    if (!stackRoots) return all;
+    // Opt-in (`diagram: layoutSkipsHiddenEdges: true`): drop default-hidden
+    // edges from the layout so edges you can't see don't spread the nodes
+    // apart. Off by default -- hidden edges still shape the layout, which keeps
+    // structure when few edges are visible.
+    const cfg = graph.diagram || {};
+    const skipHidden = cfg.layoutSkipsHiddenEdges === true;
+    const offT = new Set(skipHidden ? cfg.hiddenEdges || [] : []);
+    const offG = new Set(skipHidden ? cfg.hiddenEdgeGroups || [] : []);
     const parentOf = {};
     graph.nodes.forEach((n) => {
       parentOf[n.id] = n.parent == null ? null : n.parent;
     });
     const rep = (id) => {
+      if (!stackRoots) return id;
       let r = id;
       for (let cur = id; cur != null; cur = parentOf[cur]) {
         if (stackRoots.has(cur)) r = cur; // topmost stacked ancestor wins
       }
       return r;
     };
-    return all
-      .map((e) => ({ id: e.id, sources: [rep(e.sources[0])], targets: [rep(e.targets[0])] }))
-      .filter((e, i) => e.sources[0] !== e.targets[0] || graph.edges[i].source === graph.edges[i].target);
+    const out = [];
+    graph.edges.forEach((e, i) => {
+      if (offT.has(e.type) || offG.has(e.group)) return;
+      const s = rep(e.source);
+      const t = rep(e.target);
+      // Drop self-loops created by stack-remapping (but keep genuine ones).
+      if (stackRoots && s === t && e.source !== e.target) return;
+      out.push({ id: "edge_" + i, sources: [s], targets: [t] });
+    });
+    return out;
   }
 
   async function run(graph, domIndex, hints, stacks) {
@@ -263,6 +273,23 @@ window.IOFlow = window.IOFlow || {};
       children: roots.map((r) => toElk(r, domIndex, hints, stackRoots)),
       edges: elkEdges(graph, stackRoots),
     };
+
+    // Compounds default to ELK's `layered`; propagate the root algorithm so
+    // nested nodes lay out the same way (e.g. a rectpacking diagram packs
+    // *inside* each compound too, instead of falling back to a layered row).
+    const rootAlgo = rootOptions["elk.algorithm"];
+    if (rootAlgo && rootAlgo !== "layered") {
+      const carry = { "elk.algorithm": rootAlgo };
+      if (rootOptions["elk.aspectRatio"]) carry["elk.aspectRatio"] = rootOptions["elk.aspectRatio"];
+      (function propagate(node) {
+        (node.children || []).forEach((c) => {
+          if (c.children && c.children.length) {
+            c.layoutOptions = Object.assign({}, c.layoutOptions, carry);
+            propagate(c);
+          }
+        });
+      })(elkGraph);
+    }
 
     const elk = new ELK();
     const laid = await elk.layout(elkGraph);
