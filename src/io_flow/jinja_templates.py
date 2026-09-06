@@ -186,10 +186,13 @@ def prerender(
     # whether anything is parented to it, unless its declaration says otherwise.
     parents = {n.get("parent") for n in graph["nodes"] if n.get("parent") is not None}
 
-    def from_declaration(spec: dict[str, Any], node: dict[str, Any]) -> str:
-        """Render a type's declaration: an inline body, or a base plus slots."""
-        if spec.get("template"):
-            return render_source(spec["template"], node, "template")
+    def slots_for(spec: dict[str, Any], node: dict[str, Any]) -> dict[str, Any]:
+        """A declaration's rendered ``title``/``badge``/``meta``.
+
+        Passed to the bases, and to a type's own template file too, so a file
+        extending a base inherits what its declaration already said and
+        overrides only the block it cares about.
+        """
         slots: dict[str, Any] = {}
         for slot in ("title", "badge"):
             if spec.get(slot):
@@ -198,10 +201,16 @@ def prerender(
         # only when there is one" stays a one-liner instead of a conditional.
         lines = [render_source(m, node, "meta").strip() for m in spec.get("meta") or []]
         slots["meta"] = [Markup(line) for line in lines if line]
+        return slots
+
+    def from_declaration(spec: dict[str, Any], node: dict[str, Any]) -> str:
+        """Render a type's declaration: an inline body, or a base plus slots."""
+        if spec.get("template"):
+            return render_source(spec["template"], node, "template")
         base = spec.get("extends") or (
             "_compound" if node["id"] in parents else "_simple"
         )
-        return render(f"{base}.html", node, **slots)
+        return render(f"{base}.html", node, **slots_for(spec, node))
 
     nodes = []
     for node in graph["nodes"]:
@@ -212,7 +221,7 @@ def prerender(
         spec = types.get(node["type"]) or {}
         extra = {}
         if node["type"] in have:
-            extra["html"] = render(have[node["type"]], node)
+            extra["html"] = render(have[node["type"]], node, **slots_for(spec, node))
         else:
             # No declaration is itself a declaration: an empty spec renders the
             # base its children (or lack of them) call for.

@@ -407,12 +407,19 @@ needs loops, nested structure or a `<pre>`; a badge and two meta lines are a
 `types.yaml` line, not a file. Nodes are rendered once at mount, so baking the
 HTML in at build time loses nothing and ships no template engine in the artifact.
 
-A file can extend the same bases the declarations use, and override one block:
+A file can extend the same bases the declarations use, and override one block.
+The type's declaration still applies: its `title`/`badge`/`meta` arrive as the
+block defaults, so declare the cheap parts and override only the markup you
+actually care about:
 
 ```html
 {% extends "_compound.html" %}                      <!-- a node holding children -->
 {% block header %}<span class="node__title">{{ label }}</span>{% endblock %}
 ```
+
+Blocks available: `title`, `badge`, `meta` in `_simple`; `header` in
+`_compound`; `rows` in `_sidebar`. `{{ super() }}` inside a block renders the
+default content, so you can add to it instead of replacing it.
 
 `_simple.html`, `_compound.html` and `_sidebar.html` ship with io-flow (as
 `.html.j2` files — `{% extends %}` finds either spelling; a template of your own

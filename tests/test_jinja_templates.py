@@ -148,6 +148,29 @@ def test_inherited_template_takes_names_from_the_nodes_own_type(tmp_path):
     assert '<div class="node__meta">x</div>' in nodes["job"]["html"]
 
 
+def test_file_template_inherits_its_declarations_slots(tmp_path):
+    """A file extending a base still gets the declaration's title/badge/meta as
+    block defaults, so it can override just the block it cares about."""
+    d = tmp_path / "templates"
+    d.mkdir()
+    (d / "types.yaml").write_text(
+        "queue: {badge: queue, title: '{{ label }}!', meta: ['{{ data.depth }} waiting']}\n",
+        encoding="utf-8",
+    )
+    (d / "queue.html.j2").write_text(
+        '{% extends "_simple.html" %}'
+        '{% block meta %}<div class="node__meta">deep</div>{% endblock %}',
+        encoding="utf-8",
+    )
+    g = _graph("queue")
+    g["nodes"][0]["data"] = {"depth": 12}
+    html = _embedded(emit.build_html(g, templates=d))["queue"]["html"]
+    assert "queue!" in html  # title from the declaration
+    assert '<span class="node__badge">queue</span>' in html  # badge too
+    assert '<div class="node__meta">deep</div>' in html  # meta from the file
+    assert "12 waiting" not in html  # which replaced the declared line
+
+
 def test_compound_base_keeps_the_load_bearing_mounts(tmp_path):
     d = tmp_path / "templates"
     d.mkdir()
