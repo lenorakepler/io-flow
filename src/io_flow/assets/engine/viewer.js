@@ -41,12 +41,15 @@ window.IOFlow = window.IOFlow || {};
     // tile the height when the data conserves.
     const sankeyUnit = IOF.edges.sankeyUnit ? IOF.edges.sankeyUnit(graph) : null;
     graph.nodes.forEach((n) => {
-      const el = document.createElement("div");
-      // `classes` carries the types this one extends (and any `class:` it
-      // declared), so inherited CSS applies through the ordinary cascade.
-      el.className = ["node", "node--" + n.type].concat(n.classes || []).join(" ");
+      // The template owns the wrapper element, classes and all (see
+      // assets/templates/node.html.j2), so parse rather than build.
+      const holder = document.createElement("div");
+      holder.innerHTML = IOF.renderNode(n).trim();
+      const el = holder.firstElementChild || document.createElement("div");
+      // Defensive: the engine styles, dims and finds nodes through these two,
+      // so a template that drops them still works.
+      el.classList.add("node");
       el.setAttribute("data-node-id", n.id);
-      el.innerHTML = IOF.renderNode(n);
       if (sankeyUnit != null) {
         const population = n.data && n.data.population;
         if (typeof population === "number" && population > 0) {

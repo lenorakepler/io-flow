@@ -309,7 +309,7 @@ types:
     badge: queue                                   # the pill beside the title
     meta: ["{% if data.depth %}{{ data.depth }} waiting{% endif %}"]
   stage:
-    extends: _group                                # a node that holds children
+    extends: group                                 # inherits group's look and mount
     meta: ["{{ data.loc }}"]
   gate:
     template: '<div class="node__title">|{{ label }}|</div>'   # inline, no file
@@ -347,14 +347,14 @@ write is markup; `{{ values }}` are escaped.
 
 | field | does |
 |---|---|
-| `extends` | a base — `_node`, or `_group` (which is `_node` plus the children mount) — **or another type**, which inherits its fields and its CSS class |
+| `extends` | another type — inherits its fields, its template and its CSS class. `node` and `group` are ordinary types you can extend like any other |
 | `class` | extra CSS classes on the node, inheriting nothing else |
 | `css` | rules for this type, emitted as `.node--<type> { … }` |
 | `title` | the name line (default `{{ label }}`) |
 | `badge` | the pill beside the title; omit for none |
 | `meta` | dimmer lines under the title — **a line that renders blank is dropped**, which is how "show `cli` only if there is one" stays a one-liner |
-| `blocks` | `{name: jinja}` replacing a base's block outright — reaches slots the fields above don't cover, and `{{ super() }}` appends instead of replacing |
-| `template` | a whole inline body, instead of `extends`/`title`/`badge`/`meta` |
+| `blocks` | `{name: jinja}` replacing a block of the inherited template outright — reaches slots the fields above don't cover, and `{{ super() }}` appends instead of replacing |
+| `template` | a whole template written inline in the YAML — it owns the wrapper element, exactly like a file, and may itself `{% extends "node.html" %}` |
 | `sidebar` | inline Jinja for the detail panel, instead of the generic data dump |
 
 #### Inheriting
@@ -369,7 +369,7 @@ types:
     meta: ["{{ data.depth }} waiting"]
     css: "border-left: 4px solid #b45309;"
   urgent:
-    extends: queue          # inherits meta, badge, base — and .node--queue
+    extends: queue          # inherits meta, badge, template — and .node--queue
     badge: "!"              # overrides just this
     css: "border-color: #dc2626;"
 ```
@@ -380,28 +380,32 @@ rules are emitted first, since both selectors are one class and source order is
 what decides. Extending a compound type (`extends: group`) brings its children
 mount with it.
 
-**A leading underscore matters.** `_node` and `_group` are *bases* — template
-files that give structure and nothing else. `node` and `group` are *types*,
-declared in `types.yaml`, which carry a base plus fields plus a CSS class:
-
-| `extends:` | you get |
-|---|---|
-| `_group` | the children mount. No classes, so `.node--group` styling does **not** apply |
-| `group` | the same mount, *and* `node--group` on the wrapper, *and* group's declared fields |
-
-Nothing errors if you pick the wrong one — `extends: _group` renders a node that
-holds children and looks like a plain box, which is easy to mistake for "the
-declaration isn't working". If you wanted the look, drop the underscore.
+There is no separate "base" concept: `node` and `group` are ordinary types,
+declared in `types.yaml` and rendered by `node.html.j2` / `group.html.j2`, and
+you extend them exactly like you'd extend one of your own. `extends: group`
+gives you its template (header plus children mount), its fields, and
+`node--group` on the wrapper — so `.node--group` styling applies and your
+`.node--<type>` rules override it.
 
 `class:` is the same idea without the inheritance — `class: [pill, warn]` just
 adds classes, for a look shared by types with nothing else in common. `css:` is
 not inherited or merged: a child already gets its parent's rules via the
 parent's class, so declaring `css:` twice would emit it twice.
 
-Omit `extends` and the base follows the node: `_group` when something is
-parented to it, `_node` otherwise — compound-ness is a state, not a type. So
+Omit `extends` and the template follows the node: `group.html` when something
+is parented to it, `node.html` otherwise — compound-ness is a state, not a type.
+That gives structure without the group *look*, since no class is inherited. So
 an undeclared type still renders, and a declared one adapts if you later nest
 things inside it.
+
+#### The wrapper is the template's
+
+`node.html.j2` renders the whole element, `<div class="{{ classes }}"
+data-node-id="{{ id }}">` included, so the class list is visible in the built
+artifact rather than assembled by JavaScript at mount time. `classes` is
+`node`, the node's own `node--<type>`, then everything inherited. The engine
+re-adds `.node` and the id defensively, so a template that drops them still
+works — but keep them.
 
 #### Where declarations live
 
@@ -451,24 +455,25 @@ needs loops, nested structure or a `<pre>`; a badge and two meta lines are a
 `types.yaml` line, not a file. Nodes are rendered once at mount, so baking the
 HTML in at build time loses nothing and ships no template engine in the artifact.
 
-A file can extend the same bases the declarations use, and override one block.
+A file can extend any type's template, and override one block.
 The type's declaration still applies: its `title`/`badge`/`meta` arrive as the
 block defaults, so declare the cheap parts and override only the markup you
 actually care about:
 
 ```html
-{% extends "_group.html" %}                         <!-- a node holding children -->
+{% extends "group.html" %}                          <!-- a node holding children -->
 {% block header %}<span class="node__title">{{ label }}</span>{% endblock %}
 ```
 
-Blocks available: `title`, `badge`, `meta`, `children` in `_node`; `rows` in
-`_sidebar`. `{{ super() }}` inside a block renders the default content, so you
+Blocks available: `title`, `badge`, `meta`, `children` in `node.html`; `rows`
+in `_sidebar.html`. `{{ super() }}` inside a block renders the default content, so you
 can add to it instead of replacing it. A `blocks:` entry in a declaration does
 the same thing from YAML, so a file is only needed for markup a line can't hold.
 
-`_node.html`, `_group.html` and `_sidebar.html` ship with io-flow (as
+`node.html`, `group.html` and `_sidebar.html` ship with io-flow (as
 `.html.j2` files — `{% extends %}` finds either spelling; a template of your own
-with that name shadows the packaged one). `_group.html` also documents the
+with that name shadows the packaged one — that is how you'd restyle every node
+at once). `group.html` also documents the
 four non-obvious CSS rules a compound node needs. **Names come from the node's
 own type, never from the template it inherited** — the wrapper's `node--<type>`
 class is set by the engine from `node.type`, and `{{ type }}` inside a template
@@ -629,9 +634,9 @@ src/io_flow/
     viewer.css      <- user-editable: all node/edge styling
     templates/
       types.yaml    <- user-editable: the built-in node type declarations
-      _node.html.j2   every node: header, title, badge, meta, children block
-      _group.html.j2  _node plus the children mount
-      _sidebar.html.j2  the generic detail panel
+      node.html.j2    the root type: wrapper div, header, title/badge/meta
+      group.html.j2   node.html plus the children mount
+      _sidebar.html.j2  fragment sidebar templates extend (sidebars aren't types)
     templates.js    viewer fallbacks: bare-title guard + generic sidebar dump
     skins/          codemap.css + codemap.sidebar.html.j2
     engine/         layout edges dim drag pan save connect live collapse ui viewer

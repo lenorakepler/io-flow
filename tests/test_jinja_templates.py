@@ -76,7 +76,7 @@ def test_diagram_types_block_extends_types_per_document(tmp_path):
     src.write_text(
         "types:\n"
         "  queue: {badge: queue, meta: ['{{ data.depth }} waiting']}\n"
-        "  gate: {template: '<div class=\"node__title\">|{{ label }}|</div>'}\n"
+        "  gate:\n    template: '<div class=\"{{ classes }}\" data-node-id=\"{{ id }}\">|{{ label }}|</div>'\n"
         "nodes:\n"
         "  $inbox: {type: queue, depth: 12}\n"
         "  $g: {type: gate}\n",
@@ -84,7 +84,7 @@ def test_diagram_types_block_extends_types_per_document(tmp_path):
     )
     nodes = _embedded(emit.build_html(parse_file(src)))
     assert '<div class="node__meta">12 waiting</div>' in nodes["inbox"]["html"]
-    assert nodes["g"]["html"] == '<div class="node__title">|g|</div>'
+    assert nodes["g"]["html"] == '<div class="node node--gate" data-node-id="g">|g|</div>'
 
 
 def test_declared_sidebar_string_beats_the_skins_default(tmp_path):
@@ -120,7 +120,7 @@ def test_extending_a_type_inherits_its_fields_and_its_css_class(tmp_path):
     assert '<div class="node__meta">3 waiting</div>' in node["html"]
     assert '<span class="node__badge">!</span>' in node["html"]
     # And the parent's class rides along, so .node--queue rules apply.
-    assert node["classes"] == ["node--queue"]
+    assert 'class="node node--urgent node--queue"' in node["html"]
 
 
 def test_extending_a_compound_type_keeps_the_children_mount(tmp_path):
@@ -131,8 +131,8 @@ def test_extending_a_compound_type_keeps_the_children_mount(tmp_path):
         encoding="utf-8",
     )
     node = _embedded(emit.build_html(parse_file(src)))["s"]
-    assert 'class="node__children"' in node["html"]  # base came from `group`
-    assert node["classes"] == ["node--group"]
+    assert 'class="node__children"' in node["html"]  # template came from `group`
+    assert 'class="node node--stage node--group"' in node["html"]
 
 
 def test_class_field_adds_classes_without_inheriting(tmp_path):
@@ -142,7 +142,8 @@ def test_class_field_adds_classes_without_inheriting(tmp_path):
         "nodes: {$inbox: {type: queue}}\n",
         encoding="utf-8",
     )
-    assert _embedded(emit.build_html(parse_file(src)))["inbox"]["classes"] == ["pill", "warn"]
+    html = _embedded(emit.build_html(parse_file(src)))["inbox"]["html"]
+    assert 'class="node node--queue pill warn"' in html
 
 
 def test_css_field_is_emitted_scoped_to_the_type(tmp_path):
@@ -165,7 +166,7 @@ def test_css_field_is_emitted_scoped_to_the_type(tmp_path):
 
 def test_unknown_parent_and_cycles_are_loud(tmp_path):
     for types, match in (
-        ("{queue: {extends: nope}}", "neither a declared type nor a base"),
+        ("{queue: {extends: nope}}", "not a declared type"),
         ("{a: {extends: b}, b: {extends: a}}", "cycle"),
     ):
         src = tmp_path / "d.yaml"
@@ -187,7 +188,7 @@ def test_blocks_replace_a_base_block_from_yaml(tmp_path):
         "    badge: queue\n"
         "    blocks: {meta: '<div class=\"node__meta\">{{ data.depth }}!</div>'}\n"
         "  panel:\n"
-        "    extends: _group\n"
+        "    extends: group\n"
         "    blocks: {children: '<div class=\"node__children\" data-panel></div>'}\n"
         "nodes:\n"
         "  $inbox: {type: queue, depth: 12}\n"
@@ -235,9 +236,10 @@ def test_type_template_wins_and_undeclared_types_get_a_base(tmp_path):
     )
     nodes = _embedded(emit.build_html(_graph("queue", "widget"), templates=d))
     assert nodes["queue"]["html"] == '<div class="node__title">queue (queue.py)</div>'
-    # `widget` is neither declared nor templated: it still renders, via _node.
+    # `widget` is neither declared nor templated: it still renders, via node.html.
     assert nodes["widget"]["html"] == (
-        '<div class="node__header"><div class="node__title">widget</div></div>'
+        '<div class="node node--widget" data-node-id="widget">'
+        '<div class="node__header"><div class="node__title">widget</div></div></div>'
     )
 
 
@@ -259,7 +261,7 @@ def test_inherited_template_takes_names_from_the_nodes_own_type(tmp_path):
     d.mkdir()
     for t in ("queue", "job"):
         (d / f"{t}.html").write_text(
-            '{% extends "_node.html" %}'
+            '{% extends "node.html" %}'
             '{% block badge %} <span class="node__badge">{{ type }}</span>{% endblock %}',
             encoding="utf-8",
         )
@@ -268,7 +270,7 @@ def test_inherited_template_takes_names_from_the_nodes_own_type(tmp_path):
     assert '<span class="node__badge">job</span>' in nodes["job"]["html"]
     # A block override reaches into the shared base without restating it.
     (d / "job.html").write_text(
-        '{% extends "_node.html" %}{% block meta %}<div class="node__meta">x</div>'
+        '{% extends "node.html" %}{% block meta %}<div class="node__meta">x</div>'
         "{% endblock %}",
         encoding="utf-8",
     )
@@ -286,7 +288,7 @@ def test_file_template_inherits_its_declarations_slots(tmp_path):
         encoding="utf-8",
     )
     (d / "queue.html.j2").write_text(
-        '{% extends "_node.html" %}'
+        '{% extends "node.html" %}'
         '{% block meta %}<div class="node__meta">deep</div>{% endblock %}',
         encoding="utf-8",
     )
@@ -302,9 +304,9 @@ def test_file_template_inherits_its_declarations_slots(tmp_path):
 def test_compound_base_keeps_the_load_bearing_mounts(tmp_path):
     d = tmp_path / "templates"
     d.mkdir()
-    (d / "group.html").write_text('{% extends "_group.html" %}', encoding="utf-8")
-    nodes = _embedded(emit.build_html(_graph("group"), templates=d))
-    html = nodes["group"]["html"]
+    (d / "stage.html").write_text('{% extends "group.html" %}', encoding="utf-8")
+    nodes = _embedded(emit.build_html(_graph("stage"), templates=d))
+    html = nodes["stage"]["html"]
     assert 'class="node__header"' in html and 'class="node__children"' in html
 
 
@@ -317,7 +319,8 @@ def test_sidebar_template_is_independent_of_the_body_template(tmp_path):
     # Sidebar without a body template: the body still comes from the base.
     assert nodes["queue"]["sidebar"] == "<dl><dt>at</dt><dd>queue.py</dd></dl>"
     assert nodes["queue"]["html"] == (
-        '<div class="node__header"><div class="node__title">queue</div></div>'
+        '<div class="node node--queue" data-node-id="queue">'
+        '<div class="node__header"><div class="node__title">queue</div></div></div>'
     )
     assert "sidebar" not in nodes["function"]
 
@@ -338,11 +341,11 @@ def test_sidebar_base_dumps_data_and_takes_block_overrides(tmp_path):
 def test_html_j2_suffix_works_everywhere(tmp_path):
     """`.html.j2` is the spelling editors highlight as Jinja; it must be
     interchangeable with `.html` for node, sidebar and skin templates -- and
-    `{% extends "_node.html" %}` must still find the packaged base."""
+    `{% extends "node.html" %}` must still find the packaged base."""
     d = tmp_path / "templates"
     d.mkdir()
     (d / "queue.html.j2").write_text(
-        '{% extends "_node.html" %}'
+        '{% extends "node.html" %}'
         '{% block badge %} <span class="node__badge">{{ type }}</span>{% endblock %}',
         encoding="utf-8",
     )

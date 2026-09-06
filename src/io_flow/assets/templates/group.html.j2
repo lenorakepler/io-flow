@@ -1,10 +1,13 @@
-{# Base: a node that holds children -- `_node` plus the mount they land in.
+{# A node that holds children: `node.html` plus the mount they land in.
 
-       stage: {extends: _group, meta: ["{{ data.loc }}"]}
+   Any node with children renders through this template whether or not it says
+   so -- compound-ness is a state, not a type. Say `extends: group` when you
+   also want the group *look*, since that puts `node--group` on the wrapper and
+   the `.node--group` rules in viewer.css then apply.
 
    Both parts are load-bearing, and neither failure is loud:
      .node__header    -- engine/collapse.js only wires a collapse toggle when a
-                         node has one (it comes from `_node`, above).
+                         node has one (it comes from node.html).
      .node__children  -- where the engine mounts child nodes. Omit it and the
                          engine appends its own at the end, which is usually
                          *not* where you wanted it.
@@ -19,5 +22,5 @@
 
    (`--header-h` is the single source of truth for header height -- layout
    padding, drag clamping and collapse all read it. Don't hardcode it.) #}
-{% extends "_node.html" %}
+{% extends "node.html" %}
 {% block children %}<div class="node__children"></div>{% endblock %}

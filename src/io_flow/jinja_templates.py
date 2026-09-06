@@ -1,8 +1,8 @@
 """Jinja node templates: a directory of ``<type>.html``, rendered at build time.
 
-A node type is a declaration -- one entry in a ``types.yaml`` naming a base and
-a few Jinja fragments (``title``/``badge``/``meta``, or a whole inline
-``template``). Three layers merge, entry by entry: the packaged
+A node type is a declaration -- one entry in a ``types.yaml`` naming the type it
+extends and a few Jinja fragments (``title``/``badge``/``meta``, or a whole
+inline ``template``). Three layers merge, entry by entry: the packaged
 ``assets/templates/types.yaml``, a project's ``templates/types.yaml``, and a
 diagram's own top-level ``types:`` block. A type too big for a line gets a
 ``<type>.html`` file -- or ``<type>.html.j2``, which editors highlight as Jinja
@@ -13,10 +13,13 @@ hands it straight to the engine. Nothing re-renders a node in the browser
 (``engine/viewer.js`` mounts each node exactly once), so baking it in at build
 time costs nothing and keeps the artifact free of template machinery.
 
-Declaring is never required: a type with neither a declaration nor a file
-renders the base its children call for -- ``_group`` when something is
-parented to the node, ``_node`` otherwise -- since compound-ness is a state,
-not a type. An ``extends:`` in the declaration overrides that inference.
+There is no separate "base" concept: ``node`` and ``group`` are ordinary types
+(rendered by ``node.html.j2`` / ``group.html.j2``) that anything may extend, and
+their templates own the wrapper element -- classes, ``data-node-id`` and all.
+Declaring is never required either: a type with neither a declaration nor a file
+renders through ``group.html`` when something is parented to the node and
+``node.html`` otherwise, since compound-ness is a state, not a type. That gives
+structure without the group *look*; ``extends: group`` is how you ask for both.
 ``<type>.sidebar.html`` -- or a declaration's ``sidebar:`` string -- does the
 same for the detail panel, independently: a type may have a body, a sidebar,
 both, or neither.
@@ -29,11 +32,11 @@ Reuse is a base plus slots::
 or, for a file, Jinja inheritance::
 
     {# templates/queue.html.j2 #}
-    {% extends "_node.html" %}
+    {% extends "node.html" %}
 
-``assets/templates/`` ships ``_node.html``, ``_group.html`` and
-``_sidebar.html`` as bases; templates in the user's own directory shadow them by
-name. Every type-derived name comes from the *node's own* type, never from the
+``assets/templates/`` ships ``node.html`` and ``group.html`` (plus
+``_sidebar.html``, a fragment for sidebar templates -- sidebars are not types);
+templates in the user's own directory shadow them by name. Every type-derived name comes from the *node's own* type, never from the
 template it inherited:
 the wrapper's ``node--<type>`` class is set by the engine from ``node.type``,
 and ``{{ type }}`` inside a template is likewise the node's own, so one shared
@@ -64,13 +67,21 @@ TEMPLATE_SUFFIXES = (".html", ".html.j2")
 
 
 class _Loader(FileSystemLoader):
-    """FileSystemLoader that treats ``x.html`` and ``x.html.j2`` as one name.
+    """FileSystemLoader that also serves declarations' inline ``template:``
+    sources, and treats ``x.html`` and ``x.html.j2`` as one name.
 
-    So ``{% extends "_node.html" %}`` finds ``_node.html.j2`` -- the
-    inheritance line stays the same whichever suffix the file on disk wears.
+    So ``{% extends "node.html" %}`` finds ``node.html.j2`` -- the inheritance
+    line stays the same whichever suffix the file on disk wears, or whether the
+    thing being extended is a file at all.
     """
 
+    def __init__(self, searchpath):
+        super().__init__(searchpath)
+        self.inline: dict[str, str] = {}
+
     def get_source(self, environment, template):
+        if template in self.inline:
+            return self.inline[template], None, lambda: True
         try:
             return super().get_source(environment, template)
         except Exception:
@@ -122,12 +133,15 @@ def _as_list(value: Any) -> list[str]:
 def resolve_type(name: str, types: dict[str, dict[str, Any]]) -> tuple[dict[str, Any], list[str]]:
     """Flatten a type's inheritance chain into (fields, extra css classes).
 
-    ``extends:`` names either a base template (``_node``/``_group``) or another
-    *type*. Naming a type inherits its fields -- nearest declaration wins -- and
-    its CSS class, so ``.node--<parent>`` rules apply to the child through the
-    ordinary cascade and the child's own ``.node--<child>`` rules override them.
-    ``class:`` adds classes without inheriting anything else; ``css:`` is not
-    merged, since a child already picks it up via the parent's class.
+    ``extends:`` names another type -- there is no separate "base" concept.
+    That inherits its fields (nearest declaration wins), its template, and its
+    CSS class, so ``.node--<parent>`` rules apply to the child through the
+    ordinary cascade while the child's own ``.node--<child>`` rules override
+    them. ``class:`` adds classes without inheriting anything else; ``css:`` is
+    not merged, since a child already picks it up via the parent's class.
+
+    Structure needs no ``extends:``: a node with children renders through
+    ``group.html`` regardless. Extending ``group`` is how you ask for its look.
     """
     chain: list[str] = []
     seen: set[str] = set()
@@ -138,8 +152,7 @@ def resolve_type(name: str, types: dict[str, dict[str, Any]]) -> tuple[dict[str,
             # an undeclared type is simply undeclared, and still renders.
             if chain:
                 raise ValueError(
-                    f"types.{name}: extends {cur!r}, which is neither a declared "
-                    f"type nor a base (bases start with '_')"
+                    f"types.{name}: extends {cur!r}, which is not a declared type"
                 )
             break
         if cur in seen:
@@ -147,7 +160,7 @@ def resolve_type(name: str, types: dict[str, dict[str, Any]]) -> tuple[dict[str,
         seen.add(cur)
         chain.append(cur)
         parent = (types[cur] or {}).get("extends")
-        if not parent or str(parent).startswith("_"):
+        if not parent:
             break
         cur = str(parent)
 
@@ -156,19 +169,12 @@ def resolve_type(name: str, types: dict[str, dict[str, Any]]) -> tuple[dict[str,
         fields.update(
             {k: v for k, v in (types[step] or {}).items() if k not in ("class", "css")}
         )
-    # The base is the nearest explicit `_base` in the chain; without one the
-    # caller infers it from whether the node has children.
-    fields["extends"] = next(
-        (
-            str(e)
-            for step in chain
-            if (e := (types[step] or {}).get("extends")) and str(e).startswith("_")
-        ),
-        None,
-    )
+    # The chain itself: the caller renders through the nearest type in it that
+    # has a template file, and infers node/group when none does.
+    fields["chain"] = chain
 
     classes: list[str] = []
-    for step in reversed(chain[1:]):  # ancestors only; own class comes from the engine
+    for step in reversed(chain[1:]):  # ancestors; the node's own class is added by prerender
         classes.append(f"node--{step}")
         classes += _as_list((types[step] or {}).get("class"))
     classes += _as_list((types.get(name) or {}).get("class"))
@@ -226,16 +232,34 @@ def prerender(
     )
     # {"queue": "queue.html.j2", "queue.sidebar": "queue.sidebar.html", ...} --
     # keyed by the part before the suffix, so both spellings look the same here.
-    have = (
-        {key: p.name for p in sorted(directory.iterdir())
-         if (key := template_key(p.name)) is not None}
-        if directory is not None
-        else {}
-    )
+    # Packaged first (node.html, group.html), then the project's, which shadows
+    # by name: a `templates/node.html.j2` of yours replaces io-flow's.
+    have: dict[str, str] = {}
+    for source in (BASES, directory):
+        if source is None:
+            continue
+        for entry in sorted(source.iterdir()):
+            key = template_key(entry.name)
+            if key is not None:
+                have[key] = entry.name
 
     types = load_types(directory, graph.get("types"))
 
-    def context(node: dict[str, Any]) -> dict[str, Any]:
+    # A declaration's `template:` is a whole template written in the YAML. Name
+    # it like a file so it can be extended, inherited and shadowed the same way:
+    # a project's own `<type>.html` file wins, an inline template beats the
+    # packaged one, and `{% extends "<type>.html" %}` finds whichever it is.
+    for name, spec in types.items():
+        if spec.get("template"):
+            env.loader.inline[f"{name}.html"] = str(spec["template"])
+            have[name] = f"{name}.html"
+    if directory is not None:  # project files shadow inline templates
+        for entry in sorted(directory.iterdir()):
+            key = template_key(entry.name)
+            if key is not None:
+                have[key] = entry.name
+
+    def context(node: dict[str, Any], classes: list[str] | None = None) -> dict[str, Any]:
         return {
             "node": node,
             "id": node["id"],
@@ -243,20 +267,24 @@ def prerender(
             "label": node.get("label") or node["id"],
             "data": node.get("data") or {},
             "parent": node.get("parent"),
+            # The whole class attribute the wrapper should carry: `node`, this
+            # node's own type, then everything it inherited.
+            "classes": " ".join(["node", f"node--{node['type']}", *(classes or [])]),
         }
 
-    def render(name: str, node: dict[str, Any], **extra_ctx) -> str:
+    def render(name: str, node: dict[str, Any], classes=None, **extra_ctx) -> str:
         try:
-            return env.get_template(name).render(**context(node), **extra_ctx)
+            return env.get_template(name).render(**context(node, classes), **extra_ctx)
         except TemplateError as exc:
             raise ValueError(
                 f"{name}: {exc.__class__.__name__}: {exc} (rendering node ${node['id']})"
             ) from exc
 
-    def render_source(source: str, node: dict[str, Any], where: str) -> str:
+    def render_source(source: str, node: dict[str, Any], where: str, classes=None,
+                      **extra_ctx) -> str:
         """Render an inline Jinja string from a types.yaml declaration."""
         try:
-            return env.from_string(source).render(context(node))
+            return env.from_string(source).render(context(node, classes), **extra_ctx)
         except TemplateError as exc:
             raise ValueError(
                 f"types.yaml {node['type']}.{where}: {exc.__class__.__name__}: {exc} "
@@ -284,34 +312,35 @@ def prerender(
         slots["meta"] = [Markup(line) for line in lines if line]
         return slots
 
-    def from_declaration(spec: dict[str, Any], node: dict[str, Any]) -> str:
-        """Render a type's declaration: an inline body, or a base plus slots."""
-        if spec.get("template"):
-            return render_source(spec["template"], node, "template")
-        base = spec.get("extends") or ("_group" if node["id"] in parents else "_node")
+    def base_template(spec: dict[str, Any], node: dict[str, Any]) -> str:
+        """The template a type renders through: the nearest one in its
+        inheritance chain that exists, else the shape its children imply."""
+        # The node's own type first -- a type with a template file but no
+        # declaration has no chain to walk.
+        for step in (node["type"], *(spec.get("chain") or [])):
+            if step in have:
+                return have[step]
+        return "group.html" if node["id"] in parents else "node.html"
+
+    def from_declaration(spec: dict[str, Any], node: dict[str, Any], classes) -> str:
+        """Render a type through the template it inherits, with `title`/`badge`/
+        `meta` filled in and any `blocks:` applied on top."""
         slots = slots_for(spec, node)
+        parent = base_template(spec, node)
         blocks = spec.get("blocks") or {}
         if not blocks:
-            return render(f"{base}.html", node, **slots)
-        # `blocks:` replaces a base's block outright, from YAML -- reaching the
-        # slots the sugar doesn't cover (`children`, `_sidebar`'s `rows`) and
-        # letting `{{ super() }}` append to the default. Same thing a template
-        # file does with {% extends %}, so build exactly that and render it.
+            return render(parent, node, classes, **slots)
         for name in blocks:
             if not str(name).replace("_", "").isalnum():
                 raise ValueError(
                     f"types.yaml {node['type']}.blocks: {name!r} is not a block name"
                 )
-        source = f'{{% extends "{base}.html" %}}' + "".join(
+        # `blocks:` replaces a template's block outright, from YAML -- the same
+        # {% extends %} + {% block %} child a template file would have been.
+        source = f'{{% extends "{parent}" %}}' + "".join(
             f"{{% block {name} %}}{body}{{% endblock %}}" for name, body in blocks.items()
         )
-        try:
-            return env.from_string(source).render(context(node), **slots)
-        except TemplateError as exc:
-            raise ValueError(
-                f"types.yaml {node['type']}.blocks: {exc.__class__.__name__}: {exc} "
-                f"(rendering node ${node['id']})"
-            ) from exc
+        return render_source(source, node, "blocks", classes, **slots)
 
     nodes = []
     for node in graph["nodes"]:
@@ -320,13 +349,9 @@ def prerender(
         # skin's default sidebar template. Every layer is optional; whatever is
         # missing falls through to the packaged templates.js.
         spec, classes = resolve_type(node["type"], types)
-        extra: dict[str, Any] = {"classes": classes} if classes else {}
-        if node["type"] in have:
-            extra["html"] = render(have[node["type"]], node, **slots_for(spec, node))
-        else:
-            # No declaration is itself a declaration: an empty spec renders the
-            # base its children (or lack of them) call for.
-            extra["html"] = from_declaration(spec, node)
+        # No declaration is itself a declaration: an empty spec renders through
+        # the template its children (or lack of them) imply.
+        extra: dict[str, Any] = {"html": from_declaration(spec, node, classes)}
         sidebar = f"{node['type']}.sidebar"
         if sidebar in have:
             extra["sidebar"] = render(have[sidebar], node)

@@ -7,8 +7,8 @@
  * "Adding a node type" section of the README. The result arrives on the node as
  * `html`, and this file just hands it over.
  *
- * Every node arrives with `html` — a type nobody declared still renders, via
- * the `_node` / `_group` base its children (or lack of them) call for — so
+ * Every node arrives with `html`, wrapper element included — a type nobody
+ * declared still renders, via `node.html` / `group.html` — so
  * what is left here is a defensive guard, the generic sidebar dump for types
  * with no `sidebar:` of their own, and the two helpers skins reuse (`IOF.esc`,
  * `IOF.headerH`). A skin's JS may still reassign `IOF.renderNode` /
@@ -42,10 +42,14 @@ window.IOFlow = window.IOFlow || {};
   // default to their short name). `id` stays the unique key used for wiring.
   const name = (n) => esc(n.label != null ? n.label : n.id);
 
-  // A node with children still gets a mount even here: the engine appends a
-  // `.node__children` div when the rendered body provides none.
+  // The template owns the wrapper; this is only the guard for a graph that
+  // somehow arrives without prerendered HTML. A node with children still gets a
+  // mount: the engine appends a `.node__children` div when there is none.
   IOF.renderNode = (node) =>
-    node.html != null ? node.html : `<div class="node__title">${name(node)}</div>`;
+    node.html != null
+      ? node.html
+      : `<div class="node node--${esc(node.type)}"><div class="node__header">` +
+        `<div class="node__title">${name(node)}</div></div></div>`;
 
   /* ---- Sidebar ------------------------------------------------------------
    *

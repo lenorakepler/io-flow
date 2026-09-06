@@ -221,6 +221,36 @@ body {
 /* Compound class node wraps its children. The children mount shares the class
  * node's origin (inset:0) so ELK's parent-relative child coordinates map 1:1;
  * the header is an absolute overlay sitting in ELK's reserved top padding. */
+/* Compound group node: same overlay-header + inset-children layout as class,
+ * with its own accent so groups read as a distinct container. */
+.node--group {
+  background: var(--group-light);
+  border: 1px dashed var(--group);
+  max-width: none;
+  padding: 0;
+  cursor: pointer;
+}
+.node--group > .node__header {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: var(--header-h);
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  padding: 0 10px;
+  border-bottom: 1px dashed var(--group);
+  background: var(--group);
+  border-radius: 8px 8px 0 0;
+  z-index: 1;
+}
+.node--group > .node__children {
+  position: absolute;
+  inset: 0;
+}
+
 .node--class {
   background: var(--class-light);
   border: 1px dashed var(--class);
@@ -260,36 +290,6 @@ body {
 }
 .node--stacked > .node__children > .node:hover {
   box-shadow: 0 1px 4px rgba(16, 24, 40, 0.14);
-}
-
-/* Compound group node: same overlay-header + inset-children layout as class,
- * with its own accent so groups read as a distinct container. */
-.node--group {
-  background: var(--group-light);
-  border: 1px dashed var(--group);
-  max-width: none;
-  padding: 0;
-  cursor: pointer;
-}
-.node--group > .node__header {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: var(--header-h);
-  display: flex;
-  flex-direction: row;
-  align-items: center;
-  gap: 8px;
-  padding: 0 10px;
-  border-bottom: 1px dashed var(--group);
-  background: var(--group);
-  border-radius: 8px 8px 0 0;
-  z-index: 1;
-}
-.node--group > .node__children {
-  position: absolute;
-  inset: 0;
 }
 
 /* An empty compound (class/group with no members yet) sizes to its header

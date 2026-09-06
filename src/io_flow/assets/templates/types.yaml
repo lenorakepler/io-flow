@@ -9,9 +9,11 @@
 # `type`, `data`, `parent`. Markup in the field is markup; `{{ values }}` are
 # escaped.
 #
-#   extends:  a base (_node, or _group which also mounts children) OR another
-#             type -- naming a type inherits its fields and its CSS class, so
-#             .node--<parent> rules apply and .node--<child> rules override
+#   extends:  another type -- inherits its fields, its template and its CSS
+#             class, so .node--<parent> rules apply and .node--<child> rules
+#             override. `node` and `group` are ordinary types; extend them too.
+#             Omit it and a node with children renders through group.html
+#             anyway -- structure is inferred, the group *look* is not.
 #   class:    extra CSS classes, without inheriting anything else
 #   css:      rules for this type, emitted as `.node--<type> { ... }`
 #   title:    the node's name line              (default: "{{ label }}")
@@ -19,7 +21,8 @@
 #   meta:     dimmer lines under the title; a line rendering blank is dropped,
 #             which is how "show `cli` only if there is one" works
 #   blocks:   {name: jinja} replacing a base's block outright ({{ super() }} works)
-#   template: whole inline Jinja body, instead of extends/title/badge/meta
+#   template: a whole template written inline here -- it owns the wrapper
+#             element like a file does, and may {% extends "node.html" %}
 #   sidebar:  inline Jinja for the detail panel, instead of the generic dump
 #
 # Anything too big for a line goes in `templates/<type>.html.j2`, which wins
@@ -62,12 +65,13 @@ attributes:
 # state, not a type -- any node with children gets a mount either way -- but
 # declaring _group makes it explicit, and its CSS gives it a real header bar.
 class:
-  extends: _group
+  extends: group          # same container structure, its own accent on top
   meta:
     - "{{ data.loc }}"
 
-group:
-  extends: _group
+# `group.html` is the template for a node that holds children; every node with
+# children renders through it whether or not it says so. Declaring
+# `extends: group` is how a type asks for the group *look* as well.
+group: {}
 
-node:
-  extends: _node
+node: {}
