@@ -147,11 +147,12 @@ def build_html(
 
     # Node HTML is rendered here, from the packaged type declarations plus
     # whatever a project's own templates dir adds (`templates` pointing at a
-    # *directory* rather than a .js file), plus a skin's default sidebar.
+    # *directory* rather than a .js file), plus a skin's default sidebar. It
+    # also hands back the `css:` blocks the types in play declared.
     from . import jinja_templates
 
     tpl_dir = templates if jinja_templates.is_template_dir(templates) else None
-    graph = jinja_templates.prerender(
+    graph, type_css = jinja_templates.prerender(
         graph, tpl_dir, default_sidebar=skin_sidebars[-1] if skin_sidebars else None
     )
     if tpl_dir is not None:
@@ -161,6 +162,10 @@ def build_html(
     styles = Path(css).read_text(encoding="utf-8") if css else _read("viewer.css")
     for path in skin_css:
         styles = styles + "\n" + path.read_text(encoding="utf-8")
+
+    # A type's own `css:` last, so a diagram's declaration beats the skin it uses.
+    if type_css:
+        styles = styles + "\n" + type_css
 
     scripts = []
     for rel in SCRIPT_MANIFEST:

@@ -347,13 +347,43 @@ write is markup; `{{ values }}` are escaped.
 
 | field | does |
 |---|---|
-| `extends` | base to render: `_node`, or `_group` (which is `_node` plus the children mount) |
+| `extends` | a base — `_node`, or `_group` (which is `_node` plus the children mount) — **or another type**, which inherits its fields and its CSS class |
+| `class` | extra CSS classes on the node, inheriting nothing else |
+| `css` | rules for this type, emitted as `.node--<type> { … }` |
 | `title` | the name line (default `{{ label }}`) |
 | `badge` | the pill beside the title; omit for none |
 | `meta` | dimmer lines under the title — **a line that renders blank is dropped**, which is how "show `cli` only if there is one" stays a one-liner |
 | `blocks` | `{name: jinja}` replacing a base's block outright — reaches slots the fields above don't cover, and `{{ super() }}` appends instead of replacing |
 | `template` | a whole inline body, instead of `extends`/`title`/`badge`/`meta` |
 | `sidebar` | inline Jinja for the detail panel, instead of the generic data dump |
+
+#### Inheriting
+
+`extends:` naming another **type** inherits its fields *and* its CSS class, so
+styling comes along through the ordinary cascade:
+
+```yaml
+types:
+  queue:
+    badge: queue
+    meta: ["{{ data.depth }} waiting"]
+    css: "border-left: 4px solid #b45309;"
+  urgent:
+    extends: queue          # inherits meta, badge, base — and .node--queue
+    badge: "!"              # overrides just this
+    css: "border-color: #dc2626;"
+```
+
+`$hot: {type: urgent}` renders with `class="node node--urgent node--queue"`, so
+every `.node--queue` rule applies and `.node--urgent` overrides it — parent
+rules are emitted first, since both selectors are one class and source order is
+what decides. Extending a compound type (`extends: group`) brings its children
+mount with it.
+
+`class:` is the same idea without the inheritance — `class: [pill, warn]` just
+adds classes, for a look shared by types with nothing else in common. `css:` is
+not inherited or merged: a child already gets its parent's rules via the
+parent's class, so declaring `css:` twice would emit it twice.
 
 Omit `extends` and the base follows the node: `_group` when something is
 parented to it, `_node` otherwise — compound-ness is a state, not a type. So

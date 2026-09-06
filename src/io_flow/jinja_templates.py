@@ -113,6 +113,87 @@ def load_types(
     return types
 
 
+def _as_list(value: Any) -> list[str]:
+    if value is None:
+        return []
+    return [str(value)] if isinstance(value, str) else [str(v) for v in value]
+
+
+def resolve_type(name: str, types: dict[str, dict[str, Any]]) -> tuple[dict[str, Any], list[str]]:
+    """Flatten a type's inheritance chain into (fields, extra css classes).
+
+    ``extends:`` names either a base template (``_node``/``_group``) or another
+    *type*. Naming a type inherits its fields -- nearest declaration wins -- and
+    its CSS class, so ``.node--<parent>`` rules apply to the child through the
+    ordinary cascade and the child's own ``.node--<child>`` rules override them.
+    ``class:`` adds classes without inheriting anything else; ``css:`` is not
+    merged, since a child already picks it up via the parent's class.
+    """
+    chain: list[str] = []
+    seen: set[str] = set()
+    cur = name
+    while True:
+        if cur not in types:
+            # Only an error when we got here by following an `extends:` --
+            # an undeclared type is simply undeclared, and still renders.
+            if chain:
+                raise ValueError(
+                    f"types.{name}: extends {cur!r}, which is neither a declared "
+                    f"type nor a base (bases start with '_')"
+                )
+            break
+        if cur in seen:
+            raise ValueError(f"types.{name}: extends cycle through {cur!r}")
+        seen.add(cur)
+        chain.append(cur)
+        parent = (types[cur] or {}).get("extends")
+        if not parent or str(parent).startswith("_"):
+            break
+        cur = str(parent)
+
+    fields: dict[str, Any] = {}
+    for step in reversed(chain):  # farthest ancestor first, so nearest wins
+        fields.update(
+            {k: v for k, v in (types[step] or {}).items() if k not in ("class", "css")}
+        )
+    # The base is the nearest explicit `_base` in the chain; without one the
+    # caller infers it from whether the node has children.
+    fields["extends"] = next(
+        (
+            str(e)
+            for step in chain
+            if (e := (types[step] or {}).get("extends")) and str(e).startswith("_")
+        ),
+        None,
+    )
+
+    classes: list[str] = []
+    for step in reversed(chain[1:]):  # ancestors only; own class comes from the engine
+        classes.append(f"node--{step}")
+        classes += _as_list((types[step] or {}).get("class"))
+    classes += _as_list((types.get(name) or {}).get("class"))
+    return fields, classes
+
+
+def type_css(types: dict[str, dict[str, Any]], used: set[str]) -> str:
+    """The `css:` blocks of the types in play, as `.node--<type> { ... }` rules.
+
+    Ancestors first, so a child's rules win on source order (both selectors are
+    a single class, so specificity can't decide it).
+    """
+    wanted: set[str] = set()
+    for name in used:
+        _fields, classes = resolve_type(name, types)
+        wanted.add(name)
+        wanted.update(c[len("node--"):] for c in classes if c.startswith("node--"))
+    rules = []
+    for name in sorted(wanted, key=lambda n: (len(resolve_type(n, types)[1]), n)):
+        css = (types.get(name) or {}).get("css")
+        if css:
+            rules.append(f".node--{name} {{ {str(css).strip()} }}")
+    return "\n".join(rules)
+
+
 def is_template_dir(templates: str | Path | None) -> bool:
     """True when ``templates`` points at a Jinja directory rather than a .js file."""
     return templates is not None and Path(templates).is_dir()
@@ -122,8 +203,8 @@ def prerender(
     graph: dict[str, Any],
     directory: str | Path | None = None,
     default_sidebar: str | Path | None = None,
-) -> dict[str, Any]:
-    """Return a copy of ``graph`` with ``html``/``sidebar`` on every templated node.
+) -> tuple[dict[str, Any], str]:
+    """Return (graph copy with ``html``/``sidebar``/``classes`` per node, type css).
 
     ``default_sidebar`` is a skin's sidebar template (see ``emit.skin_assets``),
     used for any node whose type has no ``<type>.sidebar.html`` of its own.
@@ -238,8 +319,8 @@ def prerender(
         # `<type>.sidebar.html` file, else the declaration's `sidebar:`, else a
         # skin's default sidebar template. Every layer is optional; whatever is
         # missing falls through to the packaged templates.js.
-        spec = types.get(node["type"]) or {}
-        extra: dict[str, Any] = {}
+        spec, classes = resolve_type(node["type"], types)
+        extra: dict[str, Any] = {"classes": classes} if classes else {}
         if node["type"] in have:
             extra["html"] = render(have[node["type"]], node, **slots_for(spec, node))
         else:
@@ -254,4 +335,5 @@ def prerender(
         elif default_sidebar is not None:
             extra["sidebar"] = render(default_sidebar.name, node)
         nodes.append({**node, **extra} if extra else node)
-    return {**graph, "nodes": nodes}
+    css = type_css(types, {n["type"] for n in graph["nodes"]})
+    return {**graph, "nodes": nodes}, css

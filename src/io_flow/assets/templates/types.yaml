@@ -9,7 +9,11 @@
 # `type`, `data`, `parent`. Markup in the field is markup; `{{ values }}` are
 # escaped.
 #
-#   extends:  base to render (default: _node; _group also mounts children)
+#   extends:  a base (_node, or _group which also mounts children) OR another
+#             type -- naming a type inherits its fields and its CSS class, so
+#             .node--<parent> rules apply and .node--<child> rules override
+#   class:    extra CSS classes, without inheriting anything else
+#   css:      rules for this type, emitted as `.node--<type> { ... }`
 #   title:    the node's name line              (default: "{{ label }}")
 #   badge:    the pill beside the title         (omit for no badge)
 #   meta:     dimmer lines under the title; a line rendering blank is dropped,

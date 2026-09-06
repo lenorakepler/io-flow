@@ -101,6 +101,82 @@ def test_declared_sidebar_string_beats_the_skins_default(tmp_path):
     assert nodes["other"]["sidebar"] == "GENERIC"
 
 
+def _styles(html):
+    """The stylesheet the artifact ships."""
+    return html.split("<style>", 1)[1].split("</style>", 1)[0]
+
+
+def test_extending_a_type_inherits_its_fields_and_its_css_class(tmp_path):
+    src = tmp_path / "d.yaml"
+    src.write_text(
+        "types:\n"
+        "  urgent: {extends: queue, badge: '!'}\n"       # declared after its parent
+        "  queue: {badge: queue, meta: ['{{ data.depth }} waiting']}\n"
+        "nodes: {$hot: {type: urgent, depth: 3}}\n",
+        encoding="utf-8",
+    )
+    node = _embedded(emit.build_html(parse_file(src)))["hot"]
+    # Parent's meta inherited, child's badge wins.
+    assert '<div class="node__meta">3 waiting</div>' in node["html"]
+    assert '<span class="node__badge">!</span>' in node["html"]
+    # And the parent's class rides along, so .node--queue rules apply.
+    assert node["classes"] == ["node--queue"]
+
+
+def test_extending_a_compound_type_keeps_the_children_mount(tmp_path):
+    src = tmp_path / "d.yaml"
+    src.write_text(
+        "types: {stage: {extends: group}}\n"
+        "nodes: {$s: {type: stage, $kid: {type: node}}}\n",
+        encoding="utf-8",
+    )
+    node = _embedded(emit.build_html(parse_file(src)))["s"]
+    assert 'class="node__children"' in node["html"]  # base came from `group`
+    assert node["classes"] == ["node--group"]
+
+
+def test_class_field_adds_classes_without_inheriting(tmp_path):
+    src = tmp_path / "d.yaml"
+    src.write_text(
+        "types: {queue: {class: [pill, warn], badge: queue}}\n"
+        "nodes: {$inbox: {type: queue}}\n",
+        encoding="utf-8",
+    )
+    assert _embedded(emit.build_html(parse_file(src)))["inbox"]["classes"] == ["pill", "warn"]
+
+
+def test_css_field_is_emitted_scoped_to_the_type(tmp_path):
+    src = tmp_path / "d.yaml"
+    src.write_text(
+        "types:\n"
+        "  queue: {css: 'border-left: 4px solid #b45309;'}\n"
+        "  urgent: {extends: queue, css: 'border-color: #dc2626;'}\n"
+        "nodes: {$inbox: {type: urgent}}\n",
+        encoding="utf-8",
+    )
+    styles = _styles(emit.build_html(parse_file(src)))
+    assert ".node--queue { border-left: 4px solid #b45309; }" in styles
+    assert ".node--urgent { border-color: #dc2626; }" in styles
+    # Parent first: both selectors are one class, so source order decides.
+    assert styles.index(".node--queue {") < styles.index(".node--urgent {")
+    # And it lands after viewer.css, which it is meant to override.
+    assert styles.index("--header-h") < styles.index(".node--queue {")
+
+
+def test_unknown_parent_and_cycles_are_loud(tmp_path):
+    for types, match in (
+        ("{queue: {extends: nope}}", "neither a declared type nor a base"),
+        ("{a: {extends: b}, b: {extends: a}}", "cycle"),
+    ):
+        src = tmp_path / "d.yaml"
+        src.write_text(
+            f"types: {types}\nnodes: {{$n: {{type: {'queue' if 'nope' in types else 'a'}}}}}\n",
+            encoding="utf-8",
+        )
+        with pytest.raises(ValueError, match=match):
+            emit.build_html(parse_file(src))
+
+
 def test_blocks_replace_a_base_block_from_yaml(tmp_path):
     """`blocks:` reaches the slots the title/badge/meta sugar doesn't cover, so
     a one-line type never needs a one-line file."""

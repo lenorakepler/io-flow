@@ -42,7 +42,9 @@ window.IOFlow = window.IOFlow || {};
     const sankeyUnit = IOF.edges.sankeyUnit ? IOF.edges.sankeyUnit(graph) : null;
     graph.nodes.forEach((n) => {
       const el = document.createElement("div");
-      el.className = "node node--" + n.type;
+      // `classes` carries the types this one extends (and any `class:` it
+      // declared), so inherited CSS applies through the ordinary cascade.
+      el.className = ["node", "node--" + n.type].concat(n.classes || []).join(" ");
       el.setAttribute("data-node-id", n.id);
       el.innerHTML = IOF.renderNode(n);
       if (sankeyUnit != null) {
