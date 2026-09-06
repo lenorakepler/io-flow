@@ -87,6 +87,13 @@ types:
     badge: doc
     sidebar: "<dl><dt>why</dt><dd>{{ data.why }}</dd></dl>"
 
+  # Re-point the variable instead of restating the rules: viewer.css colors
+  # `file` through --file, so redefining it here recolors the border *and* the
+  # badge, both of which resolve var(--file) on this node or inside it.
+  python-file:
+    extends: file
+    css: "--file: #3572A5;"
+
 # Every node carries a `code:` field holding the YAML that made it -- its own
 # declaration, plus the type declaration doing the styling. Click a node in the
 # built HTML and the sidebar shows the source beside the result. (A multi-line
@@ -220,6 +227,19 @@ nodes:
           - label: transform
             class: flagged
           - publish
+
+  $recolored:
+    type: python-file
+    label: a variable, re-pointed
+    cli: --script
+    code: |
+      python-file:
+        extends: file
+        css: "--file: #3572A5;"
+
+      $recolored:
+        type: python-file
+        cli: --script
 
   # No declaration at all: still renders, still takes .node--undeclared.
   $plain:

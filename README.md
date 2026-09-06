@@ -525,6 +525,12 @@ Both come out as `.node--<type> { --file: … }`. `extends: file` puts
 rule resolves it on the badge, which inherits `--file` from the node. Border and
 badge recolor together from one line.
 
+Beyond the per-type accents, the chrome reads neutrals — `--surface` (nodes,
+HUD, sidebar, buttons), `--on-accent` (text on a colored fill), `--code-bg`,
+`--shadow-rgb` (channels, since the alpha varies per elevation), and
+`--warn`/`--warn-bg`/`--warn-ink` for the notice. Redefining those on `:root`
+in a skin recolors the whole viewer without touching a rule.
+
 The scope is that node and its descendants: nothing outside the subtree
 (edges, the sidebar) sees the override. `--header-h` is the one to leave alone
 — `IOF.headerH()` reads it off `:root` for layout math, so a per-type override
