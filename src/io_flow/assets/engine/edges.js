@@ -312,7 +312,10 @@ window.IOFlow = window.IOFlow || {};
       const hidden = ep.hidden || (off && off.has(rec.edge.type));
       rec.el.style.display = hidden ? "none" : "";
       if (rec.label) rec.label.style.display = hidden ? "none" : "";
-      if (hidden) return;
+      // Skip geometry only when an endpoint is collapsed away (no route to
+      // draw). A type-hidden edge still gets its `d` computed so click-to-focus
+      // (dim.js) can reveal it instantly without a re-layout.
+      if (ep.hidden) return;
       const r = routeOf(ep);
       rec.el.setAttribute("d", r.d);
       if (rec.label) {

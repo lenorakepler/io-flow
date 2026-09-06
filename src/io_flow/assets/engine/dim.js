@@ -85,9 +85,19 @@ window.IOFlow = window.IOFlow || {};
     state.graph.nodes.forEach((n) => {
       state.nodeEls[n.id].classList.toggle("dimmed", !lit.has(n.id));
     });
-    state.edgeEls.forEach(({ el, edge }) => {
+    // Reveal a focused node's edges even if their type is toggled off (so a
+    // click shows just that node's I/O); keep other type-hidden edges hidden.
+    const off = state.hiddenEdgeTypes;
+    state.edgeEls.forEach(({ el, edge, label }) => {
       const on = focus.has(edge.source) || focus.has(edge.target);
       el.classList.toggle("dimmed", !on);
+      if (on) {
+        el.style.display = "";
+        if (label) label.style.display = "";
+      } else if (off && off.has(edge.type)) {
+        el.style.display = "none";
+        if (label) label.style.display = "none";
+      }
     });
 
     showSidebar(state, id);
@@ -103,6 +113,8 @@ window.IOFlow = window.IOFlow || {};
     state.selected = null;
     state.graph.nodes.forEach((n) => state.nodeEls[n.id].classList.remove("dimmed"));
     state.edgeEls.forEach(({ el }) => el.classList.remove("dimmed"));
+    // Re-hide any type-hidden edges that a selection revealed.
+    if (IOF.edges && IOF.edges.updateFor) IOF.edges.updateFor(state);
     hideSidebar();
     document.dispatchEvent(new CustomEvent("ioflow:clear"));
     if (hadSelection && IOF.a11y) IOF.a11y.onClear();
