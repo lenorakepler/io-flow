@@ -977,3 +977,56 @@ def test_style_skin_files_resolve_relative_to_yaml_but_names_dont(tmp_path):
         str(tmp_path / "sub" / "x.css"),
         str(tmp_path / "extra.js"),
     ]
+
+
+def test_descriptors_synthesize_a_first_child_from_a_field():
+    """A registered `descriptors:` field becomes a synthetic child box."""
+    graph = parse(
+        {
+            "descriptors": {"description": "desc"},
+            "nodes": {
+                "$a": {
+                    "type": "group",
+                    "description": "hello",
+                    "$real": {"type": "file"},
+                },
+            },
+        }
+    )
+    child = _node(graph, "a.description")
+    assert child["type"] == "desc"
+    assert child["parent"] == "a"
+    assert child["data"]["text"] == "hello"
+    # Emitted before the real child, so it lays out first.
+    ids = [n["id"] for n in graph["nodes"]]
+    assert ids.index("a.description") < ids.index("real")
+    # The field still rides along on the parent (sidebar keeps it).
+    assert _node(graph, "a")["data"]["description"] == "hello"
+
+
+def test_descriptors_only_fire_when_registered_and_present():
+    # No descriptors block: description stays plain data, no synthetic child.
+    g = parse({"nodes": {"$a": {"description": "x"}}})
+    assert not any(n["id"] == "a.description" for n in g["nodes"])
+    # Registered but field absent on a node: nothing synthesized.
+    g = parse({"descriptors": {"description": "desc"}, "nodes": {"$a": {}}})
+    assert not any(n["id"] == "a.description" for n in g["nodes"])
+
+
+def test_descriptors_must_be_a_mapping():
+    with pytest.raises(ValueError, match="descriptors: must be a mapping"):
+        parse({"descriptors": ["description"], "nodes": {"$a": {}}})
+
+
+def test_descriptors_id_collision_is_a_loud_error():
+    from io_flow.parser import DuplicateNodeError
+
+    with pytest.raises(DuplicateNodeError):
+        parse(
+            {
+                "descriptors": {"description": "desc"},
+                "nodes": {
+                    "$a": {"description": "x", "$a.description": {"type": "file"}},
+                },
+            }
+        )

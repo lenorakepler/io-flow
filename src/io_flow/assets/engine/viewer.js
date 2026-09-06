@@ -142,6 +142,25 @@ window.IOFlow = window.IOFlow || {};
       el.style.width = p.w + "px";
       el.style.height = p.h + "px";
     });
+    // `diagram: fillWidth: [type, ...]` stretches nodes of those types to their
+    // parent's inner width. A post-pass, because the parent's width is only
+    // final once every child (including this one, at its measured width) is
+    // placed -- a child can't drive the parent width and match it at once.
+    const fill = new Set((state.graph.diagram || {}).fillWidth || []);
+    if (fill.size) {
+      state.graph.nodes.forEach((n) => {
+        if (!fill.has(n.type) || n.parent == null) return;
+        const p = state.pos[n.id];
+        const pp = state.pos[n.parent];
+        const el = state.nodeEls[n.id];
+        if (!p || !pp || !el) return;
+        // Flush to the parent's edges: full width, no inset.
+        p.x = 0;
+        p.w = pp.w;
+        el.style.left = "0px";
+        el.style.width = p.w + "px";
+      });
+    }
   }
 
   IOF.applyPositions = applyPositions;

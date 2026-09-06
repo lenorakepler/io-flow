@@ -315,6 +315,18 @@ def parse(data: dict[str, Any]) -> dict[str, Any]:
     if not isinstance(defaults, dict):
         raise ValueError(f"defaults: must be a mapping of parent type -> child type")
 
+    # `descriptors:` registers data fields that render as their own child box
+    # rather than sidebar text: a `{field: child-type}` mapping. A node carrying
+    # such a field gets a synthetic first child of that type, holding the value
+    # as `text`. These children take layout space but never need an id of their
+    # own and are never edge endpoints -- like `steps`, position is identity.
+    descriptors = data.get("descriptors", {}) or {}
+    if not isinstance(descriptors, dict):
+        raise ValueError(
+            "descriptors: must be a mapping of field name -> child node type"
+        )
+    descriptors = {str(k): str(v) for k, v in descriptors.items()}
+
     # A type may say what its untyped children are: `childtype:` in the
     # declaration, which beats the structural fallback and loses to an explicit
     # `defaults:` entry (that is the diagram overriding a shared declaration).
@@ -446,6 +458,19 @@ def parse(data: dict[str, Any]) -> dict[str, Any]:
             }
         )
         record_edges(node_id, spec)
+        # Descriptor fields (registered in `descriptors:`) expand into synthetic
+        # child boxes, emitted before real children so they sit first. The value
+        # rides along as `text` for the child type's template. A collision on the
+        # generated id (`<parent>.<field>`) raises like any duplicate name.
+        for field, ctype in descriptors.items():
+            if field in node_data:
+                add_node(
+                    f"{node_id}.{field}",
+                    {"type": ctype, "text": node_data[field]},
+                    node_id,
+                    node_type,
+                    ctype,
+                )
         # `steps:` is a list of children whose position is their identity: the
         # id is the parent's plus the index, so `$stages2` addresses the third
         # one, and `number` carries that index into templates. An item is an
