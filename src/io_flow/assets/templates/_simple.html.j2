@@ -12,7 +12,16 @@
    renders the right badge -- and the engine sets the wrapper's `node--<type>`
    class from the node too. Style a type with a `.node--<type>` rule in your
    `style: skin:` css. #}
-<div class="node__title">{% block title %}{{ title | default(label, true) }}{% endblock %}{% block badge %}{% if badge %} <span class="node__badge">{{ badge }}</span>{% endif %}{% endblock %}</div>
-{% block meta %}{% for line in meta | default([], true) %}
+{# The `-` markers keep this readable here and tight in the artifact: every
+   node carries its rendered HTML, so stray indentation would ship per node. #}
+<div class="node__title">
+   {%- block title %}{{ title | default(label, true) }}{% endblock -%}
+   {%- block badge -%}
+      {%- if badge %} <span class="node__badge">{{ badge }}</span>{% endif -%}
+   {%- endblock -%}
+</div>
+{%- block meta -%}
+   {%- for line in meta | default([], true) %}
 <div class="node__meta">{{ line }}</div>
-{% endfor %}{% endblock %}
+   {%- endfor -%}
+{%- endblock %}

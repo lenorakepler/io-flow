@@ -110,7 +110,7 @@ def test_type_template_wins_and_undeclared_types_get_a_base(tmp_path):
     nodes = _embedded(emit.build_html(_graph("queue", "widget"), templates=d))
     assert nodes["queue"]["html"] == '<div class="node__title">queue (queue.py)</div>'
     # `widget` is neither declared nor templated: it still renders, via _simple.
-    assert nodes["widget"]["html"] == '<div class="node__title">widget</div>\n'
+    assert nodes["widget"]["html"] == '<div class="node__title">widget</div>'
 
 
 def test_undeclared_type_gets_compound_when_it_has_children():
@@ -165,7 +165,7 @@ def test_sidebar_template_is_independent_of_the_body_template(tmp_path):
     nodes = _embedded(emit.build_html(_graph("queue", "function"), templates=d))
     # Sidebar without a body template: the body still comes from the base.
     assert nodes["queue"]["sidebar"] == "<dl><dt>at</dt><dd>queue.py</dd></dl>"
-    assert nodes["queue"]["html"] == '<div class="node__title">queue</div>\n'
+    assert nodes["queue"]["html"] == '<div class="node__title">queue</div>'
     assert "sidebar" not in nodes["function"]
 
 

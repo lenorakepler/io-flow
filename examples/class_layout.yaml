@@ -50,4 +50,18 @@ nodes:
 # Member -> member within one class: dropped from the ELK draft entirely
 # (both endpoints collapse to Config) but still rendered between the rows.
 edges:
-  - { from: $validate, to: $to_dict, type: calls, label: then }
+- {from: $validate, to: $to_dict, type: calls, label: then}
+layout:
+  _topology: be50279af4a379e1
+  _anchors:
+    validate>to_dict:calls: {to: right, from: right}
+  configfile: [171, 211]
+  Config: [368, 20, 141, 232]
+  from_yaml: [16, 40]
+  validate: [16, 86]
+  attributes: [16, 132]
+  to_dict: [16, 178]
+  Runner: [166, 31, 132, 140]
+  run: [16, 40]
+  teardown: [16, 86]
+  main: [20, 73]
