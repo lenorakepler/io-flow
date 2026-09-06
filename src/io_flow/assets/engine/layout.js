@@ -260,6 +260,73 @@ window.IOFlow = window.IOFlow || {};
     return out;
   }
 
+  // Push a set of sibling boxes apart until none overlap (with a gap), then
+  // clamp them into their parent's content area. Used to make force/stress
+  // layouts usable: those don't enforce non-overlap for sized compound boxes.
+  function separate(kids, topPad, gap) {
+    for (let iter = 0; iter < 200; iter++) {
+      let moved = false;
+      for (let i = 0; i < kids.length; i++) {
+        for (let j = i + 1; j < kids.length; j++) {
+          const a = kids[i];
+          const b = kids[j];
+          const ox = Math.min(a.x + a.width, b.x + b.width) - Math.max(a.x, b.x);
+          const oy = Math.min(a.y + a.height, b.y + b.height) - Math.max(a.y, b.y);
+          if (ox <= 0 || oy <= 0) continue; // no real overlap
+          moved = true;
+          const acx = a.x + a.width / 2;
+          const bcx = b.x + b.width / 2;
+          const acy = a.y + a.height / 2;
+          const bcy = b.y + b.height / 2;
+          if (ox < oy) {
+            const push = (ox + gap) / 2;
+            const dir = acx <= bcx ? 1 : -1;
+            a.x -= dir * push;
+            b.x += dir * push;
+          } else {
+            const push = (oy + gap) / 2;
+            const dir = acy <= bcy ? 1 : -1;
+            a.y -= dir * push;
+            b.y += dir * push;
+          }
+        }
+      }
+      if (!moved) break;
+    }
+    let minX = Infinity;
+    let minY = Infinity;
+    kids.forEach((k) => {
+      minX = Math.min(minX, k.x);
+      minY = Math.min(minY, k.y);
+    });
+    const dx = minX < gap ? gap - minX : 0;
+    const dy = minY < topPad ? topPad - minY : 0;
+    if (dx || dy) kids.forEach((k) => { k.x += dx; k.y += dy; });
+  }
+
+  // Grow a compound to contain its (possibly moved) children.
+  function fit(node, gap) {
+    const kids = node.children || [];
+    if (!kids.length) return;
+    let maxX = 0;
+    let maxY = 0;
+    kids.forEach((k) => {
+      maxX = Math.max(maxX, k.x + k.width);
+      maxY = Math.max(maxY, k.y + k.height);
+    });
+    node.width = Math.max(node.width || 0, maxX + gap);
+    node.height = Math.max(node.height || 0, maxY + gap);
+  }
+
+  // Bottom-up: de-overlap each compound's children (deepest first, so a parent
+  // separates already-final child boxes), then grow the parent to fit.
+  function declump(node, topPad, gap) {
+    const kids = node.children || [];
+    kids.forEach((k) => declump(k, IOF.headerH() + 8, gap));
+    if (kids.length > 1) separate(kids, topPad, gap);
+    fit(node, gap);
+  }
+
   async function run(graph, domIndex, hints, stacks) {
     const stackRoots = stacks ? stacks.roots : null;
     const roots = buildForest(graph);
@@ -293,6 +360,13 @@ window.IOFlow = window.IOFlow || {};
 
     const elk = new ELK();
     const laid = await elk.layout(elkGraph);
+
+    // `diagram: deoverlap: true` — separate any overlapping boxes after layout.
+    // Makes force/stress usable (they don't keep compound boxes apart).
+    if ((graph.diagram || {}).deoverlap) {
+      const gap = Number((graph.diagram || {}).spacing) || 16;
+      declump(laid, 16, gap);
+    }
 
     const pos = {};
     (function walk(nodes) {

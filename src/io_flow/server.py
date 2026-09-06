@@ -162,7 +162,7 @@ class LayoutServer:
 
     def rebuild(self) -> None:
         graph = parse_file(self.input_path)
-        layout_store.annotate_graph(graph, self.input_path)
+        layout_store.annotate_graph(graph, graph.get("_layout_path") or self.input_path)
         # CLI flags win over the diagram's own style: block (mirrors emit).
         style = graph.get("style") or {}
         self._eff_css = self.css if self.css is not None else style.get("css")
@@ -182,7 +182,9 @@ class LayoutServer:
         if new_edges:
             edge_store.append_edges(self.input_path, parse_file(self.input_path), new_edges)
         graph = parse_file(self.input_path)
-        layout_store.merge_positions(self.input_path, graph, positions, anchors)
+        layout_store.merge_positions(
+            graph.get("_layout_path") or self.input_path, graph, positions, anchors
+        )
         self.rebuild()
 
     def serve_forever(self) -> None:

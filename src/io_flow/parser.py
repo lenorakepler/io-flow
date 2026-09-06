@@ -278,6 +278,13 @@ def parse_file(path: str | Path) -> dict[str, Any]:
                 _resolve(s) if Path(s).suffix in SKIN_SUFFIXES else s
                 for s in style["skin"]
             ]
+    # `layoutFile:` (top level) sends saved positions to a sidecar YAML instead
+    # of this source file, so editing the source doesn't clobber a hand-tuned
+    # layout. Resolved relative to the source; consumers read/write there.
+    lf = (data or {}).get("layoutFile")
+    if isinstance(lf, str) and lf.strip():
+        p = Path(lf).expanduser()
+        graph["_layout_path"] = str(p if p.is_absolute() else path.parent / p)
     return graph
 
 

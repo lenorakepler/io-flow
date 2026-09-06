@@ -174,8 +174,12 @@ def merge_positions(
     """
     path = Path(path)
     yaml = _yaml()
-    with open(path, "r", encoding="utf-8") as fh:
-        data = yaml.load(fh)
+    # A sidecar layout file (layoutFile:) may not exist yet -- create it.
+    if path.exists():
+        with open(path, "r", encoding="utf-8") as fh:
+            data = yaml.load(fh)
+    else:
+        data = None
     if data is None:
         data = CommentedMap()
 

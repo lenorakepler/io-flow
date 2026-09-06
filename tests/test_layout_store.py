@@ -184,3 +184,22 @@ def test_malformed_position_entries_are_skipped(yaml_copy):
     )
     saved = layout_store.read_layout(yaml_copy)
     assert saved["positions"] == {"file1": [1.0, 2.0]}
+
+
+def test_layoutfile_sidecar_roundtrip(tmp_path):
+    from io_flow import layout_store
+    from io_flow.parser import parse_file
+
+    (tmp_path / "d.yaml").write_text(
+        "layoutFile: side.layout.yaml\nnodes: {$a: {}, $b: {}}\n", encoding="utf-8"
+    )
+    g = parse_file(tmp_path / "d.yaml")
+    lp = g["_layout_path"]
+    assert lp == str(tmp_path / "side.layout.yaml")
+    # sidecar doesn't exist yet -> created on first save
+    layout_store.merge_positions(lp, g, {"a": [10, 20], "b": [30, 40]})
+    assert (tmp_path / "side.layout.yaml").exists()
+    # source YAML untouched (no layout: block written into it)
+    assert "layout:" not in (tmp_path / "d.yaml").read_text(encoding="utf-8")
+    saved = layout_store.read_layout(lp)
+    assert saved["positions"]["a"] == [10.0, 20.0]

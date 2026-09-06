@@ -24,7 +24,7 @@ def _build_graph(input_path: Path):
     from . import layout_store
 
     graph = parse_file(input_path)
-    layout_store.annotate_graph(graph, input_path)
+    layout_store.annotate_graph(graph, graph.get("_layout_path") or input_path)
     return graph
 
 
@@ -88,8 +88,9 @@ def cmd_apply_layout(args: argparse.Namespace) -> int:
 
     positions = json.loads(layout_json.read_text(encoding="utf-8"))
     graph = parse_file(input_path)
-    layout_store.merge_positions(input_path, graph, positions)
-    print(f"merged {len(positions)} positions into {input_path}")
+    lp = Path(graph.get("_layout_path") or input_path)
+    layout_store.merge_positions(lp, graph, positions)
+    print(f"merged {len(positions)} positions into {lp}")
     return 0
 
 
@@ -98,10 +99,11 @@ def cmd_align(args: argparse.Namespace) -> int:
 
     input_path = Path(args.input)
     graph = parse_file(input_path)
-    saved = layout_store.read_layout(input_path)
+    lp = Path(graph.get("_layout_path") or input_path)
+    saved = layout_store.read_layout(lp)
     if not saved or not saved.get("positions"):
         print(
-            f"{input_path}: no saved layout: block to align (drag + Save first)",
+            f"{lp}: no saved layout: block to align (drag + Save first)",
             file=sys.stderr,
         )
         return 1
@@ -111,12 +113,12 @@ def cmd_align(args: argparse.Namespace) -> int:
     for nid, axis, old, new in moves:
         print(f"  {nid}: {axis} {old:g} -> {new:g}")
     if not moves:
-        print(f"{input_path}: already aligned (tolerance {args.tolerance:g}px)")
+        print(f"{lp}: already aligned (tolerance {args.tolerance:g}px)")
         return 0
     if args.dry_run:
-        print(f"{input_path}: {len(moves)} value(s) would move (dry run; file untouched)")
+        print(f"{lp}: {len(moves)} value(s) would move (dry run; file untouched)")
         return 0
-    layout_store.merge_positions(input_path, graph, new_positions)
+    layout_store.merge_positions(lp, graph, new_positions)
     print(f"{input_path}: aligned {len(moves)} value(s) (tolerance {args.tolerance:g}px)")
     return 0
 
