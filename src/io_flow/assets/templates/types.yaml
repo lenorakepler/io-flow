@@ -16,7 +16,8 @@
 #             Omit it and a node with children renders through group.html
 #             anyway -- structure is inferred, the group *look* is not.
 #   class:    extra CSS classes, without inheriting anything else
-#   css:      rules for this type, emitted as `.node--<type> { ... }`
+#   css:      properties for this type, wrapped in `.node--<type> { ... }`;
+#             a block that writes its own selectors is emitted verbatim
 #   title:    the node's name line              (default: "{{ label }}")
 #   badge:    the pill beside the title         (omit for no badge)
 #   meta:     dimmer lines under the title; a line rendering blank is dropped,

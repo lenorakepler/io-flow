@@ -196,8 +196,13 @@ def type_css(types: dict[str, dict[str, Any]], used: set[str]) -> str:
     rules = []
     for name in sorted(wanted, key=lambda n: (len(resolve_type(n, types)[1]), n)):
         css = (types.get(name) or {}).get("css")
-        if css:
-            rules.append(f".node--{name} {{ {str(css).strip()} }}")
+        if not css:
+            continue
+        css = str(css).strip()
+        # Properties get wrapped in the type's selector; a block that already
+        # writes its own selectors (`.node--x ul { ... }`) is emitted verbatim,
+        # since wrapping it would nest the selector inside itself.
+        rules.append(css if "{" in css else f".node--{name} {{ {css} }}")
     return "\n".join(rules)
 
 

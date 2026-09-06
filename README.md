@@ -349,7 +349,7 @@ write is markup; `{{ values }}` are escaped.
 |---|---|
 | `extends` | another type — inherits its fields, its template and its CSS class. `node` and `group` are ordinary types you can extend like any other |
 | `class` | extra CSS classes on the node, inheriting nothing else |
-| `css` | rules for this type, emitted as `.node--<type> { … }` |
+| `css` | properties for this type, wrapped in `.node--<type> { … }` — or a block with its own selectors, emitted as written |
 | `title` | the name line (default `{{ label }}`) |
 | `badge` | the pill beside the title; omit for none |
 | `meta` | dimmer lines under the title — **a line that renders blank is dropped**, which is how "show `cli` only if there is one" stays a one-liner |

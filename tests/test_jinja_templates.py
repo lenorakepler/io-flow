@@ -164,6 +164,20 @@ def test_css_field_is_emitted_scoped_to_the_type(tmp_path):
     assert styles.index("--header-h") < styles.index(".node--queue {")
 
 
+def test_css_with_its_own_selectors_is_emitted_verbatim(tmp_path):
+    """Wrapping a block that already has selectors would nest them inside the
+    type's own selector, which matches nothing."""
+    src = tmp_path / "d.yaml"
+    src.write_text(
+        "types: {bag: {css: '.node--bag ul { margin: 0; }'}}\n"
+        "nodes: {$b: {type: bag}}\n",
+        encoding="utf-8",
+    )
+    styles = _styles(emit.build_html(parse_file(src)))
+    assert ".node--bag ul { margin: 0; }" in styles
+    assert ".node--bag { .node--bag" not in styles
+
+
 def test_unknown_parent_and_cycles_are_loud(tmp_path):
     for types, match in (
         ("{queue: {extends: nope}}", "not a declared type"),
