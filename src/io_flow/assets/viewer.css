@@ -184,6 +184,9 @@ body {
   letter-spacing: 0.03em;
   padding: 1px 6px;
   border-radius: 999px;
+  /* The per-type accents below recolor this; the neutral default is what makes
+   * a badge on an undeclared type visible instead of white-on-white. */
+  background: var(--muted);
   color: #fff;
   vertical-align: middle;
 }
@@ -497,6 +500,22 @@ body {
 #sidebar dd {
   margin: 0;
   word-break: break-word;
+}
+/* A multi-line data value (a `code:` field carrying YAML, a snippet) keeps its
+   whitespace instead of collapsing into one run-on line. */
+#sidebar dd pre {
+  margin: 0;
+  padding: 8px 10px;
+  overflow-x: auto;
+  background: #f3f4f6;
+  border-radius: 6px;
+  font-size: 11px;
+  line-height: 1.45;
+  white-space: pre;
+}
+#sidebar dd pre code {
+  background: none;
+  padding: 0;
 }
 #sidebar .sb-close {
   position: absolute;

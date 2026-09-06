@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 import pytest
 
@@ -144,6 +145,42 @@ def test_class_field_adds_classes_without_inheriting(tmp_path):
     )
     html = _embedded(emit.build_html(parse_file(src)))["inbox"]["html"]
     assert 'class="node node--queue pill warn"' in html
+
+
+def test_a_node_can_add_its_own_classes(tmp_path):
+    """One-off styling without inventing a type for it -- and not a field."""
+    src = tmp_path / "d.yaml"
+    src.write_text(
+        "types: {queue: {class: pill, meta: ['{{ fields.keys() | join(\",\") }}']}}\n"
+        "nodes: {$inbox: {type: queue, class: [warn, big], depth: 3}}\n",
+        encoding="utf-8",
+    )
+    html = _embedded(emit.build_html(parse_file(src)))["inbox"]["html"]
+    assert 'class="node node--queue pill warn big"' in html  # node's own last
+    assert '<div class="node__meta">depth</div>' in html  # class: is not a field
+
+
+def test_the_styling_example_still_demonstrates_what_it_claims(tmp_path):
+    """examples/styling.yaml is the README section; keep it from rotting."""
+    example = Path(__file__).resolve().parents[1] / "examples" / "styling.yaml"
+    nodes = _embedded(emit.build_html(parse_file(example)))
+    assert 'class="node node--urgent node--stage"' in nodes["inherited"]["html"]
+    assert 'class="node node--stage flagged"' in nodes["one_off"]["html"]
+    assert 'class="node node--chip chip"' in nodes["rounded"]["html"]
+    assert "<li><code>depth</code> 12</li>" in nodes["blocked"]["html"]  # blocks: won
+    assert "ITS OWN TEMPLATE" in nodes["stamped"]["html"]  # template: owns the wrapper
+    assert "<dt>why</dt>" in nodes["member"]["sidebar"]
+    # steps: numbered by position, no id per step, class: works on one of them
+    assert '<span class="node__badge">1</span>' in nodes["pipeline1"]["html"]
+    assert 'class="node node--step flagged"' in nodes["pipeline1"]["html"]
+    # Each node's `code:` quotes the YAML that made it -- keep the copies honest.
+    source = {line.strip() for line in example.read_text(encoding="utf-8").splitlines()}
+    quoted = 0
+    for node in nodes.values():
+        for line in (node["data"].get("code") or "").splitlines():
+            assert line.strip() in source, f"{node['id']}.code drifted: {line!r}"
+            quoted += 1
+    assert quoted > 40  # and that they didn't quietly disappear
 
 
 def test_css_field_is_emitted_scoped_to_the_type(tmp_path):

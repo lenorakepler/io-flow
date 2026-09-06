@@ -1,31 +1,30 @@
 {# The root node template: the wrapper element and everything in it.
 
-   Every type is rendered by a template like this one -- there is no separate
-   "base" concept. A type with no template file of its own is rendered by the
-   nearest one it extends, or by this file (or `group.html` when it holds
-   children).
+   A type with no template file of its own is rendered by this file (or `group.html` when it holds children).
 
    `classes` is the whole class attribute: `node`, this node's own
    `node--<type>`, then every type it extends and anything its `class:` added.
-   Keep it -- the engine styles, dims, collapses and selects through those
-   classes, and adds `.node` back defensively if a template drops it.
 
-   Blocks: `title`, `badge`, `meta`, `children`. Override them from a
-   declaration (`blocks: {meta: '...'}`) or from a `templates/<type>.html.j2`
-   file that extends this.
+   Blocks: 
+      - `header` (wrapping `title`/`badge`/`meta`), `title`, `badge`, `meta`, `children`. 
+      Override them from a declaration (`blocks: {meta: '...'}`) or from a `templates/<type>.html.j2` file that extends this.
 
-   The `-` markers keep this readable here and tight in the artifact: every
-   node carries its rendered HTML, so stray indentation would ship per node. #}
+   The `-` markers keep this readable here and tight in the artifact: every node carries its rendered HTML, so stray indentation would ship per node. #}
 <div class="{{ classes }}" data-node-id="{{ id }}">
    {#- #}<div class="node__header">
-      {%- block title %}<div class="node__title">{{ title | default(label, true) }}
-         {%- block badge %}{% if badge %} <span class="node__badge">{{ badge }}</span>{% endif %}{% endblock -%}
-      </div>{% endblock -%}
+   {%- block header %}
+      {%- block title -%}
+         <div class="node__title">
+            {{- title | default(label, true) }}
+            {%- block badge %}{% if badge %} <span class="node__badge">{{ badge }}</span>{% endif %}{% endblock -%}
+         </div>
+      {%- endblock -%}
       {%- block meta -%}
          {%- for line in meta | default([], true) %}
-<div class="node__meta">{{ line }}</div>
+            {#- #}<div class="node__meta">{{ line }}</div>
          {%- endfor -%}
       {%- endblock -%}
+   {%- endblock -%}
    </div>
    {%- block children %}{% endblock -%}
 </div>

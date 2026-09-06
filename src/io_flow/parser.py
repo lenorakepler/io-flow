@@ -54,6 +54,13 @@ Rules:
   Placement is organization only and never changes meaning: references are
   always global names. (``edges`` is therefore a reserved key in node
   mappings.)
+* **``steps:`` is a list of children whose position is their identity.** The
+  id is the parent's plus the index (``$stages2``) and the index rides along
+  as ``number`` in the node's data, so an ordered pipeline needs no name per
+  stage. Items are ordinary node specs (a bare string is its label); untyped
+  ones default to ``step``. Reordering renumbers -- that is the trade.
+  ``autoedges:`` beside the list chains each step to the next (``true`` types
+  them ``next``; a string names the type).
 * **Two-pass.** Every node id is collected first, then references are
   resolved, so forward references work regardless of document order.
 * Unresolved ``$refs`` emit a loud ``UnresolvedReferenceWarning`` listing
@@ -239,9 +246,9 @@ def parse(data: dict[str, Any]) -> dict[str, Any]:
     if not isinstance(defaults, dict):
         raise ValueError(f"defaults: must be a mapping of parent type -> child type")
 
-    def default_type(parent_type: str | None) -> str:
+    def default_type(parent_type: str | None, fallback: str = DEFAULT_TYPE) -> str:
         key = parent_type if parent_type is not None else "_root"
-        return str(defaults.get(key, DEFAULT_TYPE))
+        return str(defaults.get(key, fallback))
 
     # Reference sites recorded during the walk and resolved in pass 2.
     # Each entry: (owner_node_id, edge_type, ref, annotation, context_key)
@@ -289,7 +296,13 @@ def parse(data: dict[str, Any]) -> dict[str, Any]:
                     if isinstance(value, str):
                         literals.append((node_id, edge_type, value))
 
-    def add_node(name: str, spec: Any, parent_id: str | None, parent_type: str | None) -> None:
+    def add_node(
+        name: str,
+        spec: Any,
+        parent_id: str | None,
+        parent_type: str | None,
+        fallback_type: str = DEFAULT_TYPE,
+    ) -> None:
         if not name:
             raise ValueError(
                 f"invalid node name {SIGIL!r}"
@@ -311,7 +324,10 @@ def parse(data: dict[str, Any]) -> dict[str, Any]:
             )
         seen.add(node_id)
 
-        node_type = str(spec["type"]) if spec.get("type") is not None else default_type(parent_type)
+        node_type = (
+            str(spec["type"]) if spec.get("type") is not None
+            else default_type(parent_type, fallback_type)
+        )
         label = spec.get("label")
         children = {k: v for k, v in spec.items() if str(k).startswith(SIGIL)}
         # `edges` is reserved inside a node: a locally-declared explicit-edge
@@ -321,7 +337,7 @@ def parse(data: dict[str, Any]) -> dict[str, Any]:
         node_data = {
             str(k): v
             for k, v in spec.items()
-            if not str(k).startswith(SIGIL) and k != "edges"
+            if not str(k).startswith(SIGIL) and k not in ("edges", "steps", "autoedges")
         }
         nodes.append(
             {
@@ -335,6 +351,39 @@ def parse(data: dict[str, Any]) -> dict[str, Any]:
             }
         )
         record_edges(node_id, spec)
+        # `steps:` is a list of children whose position is their identity: the
+        # id is the parent's plus the index, so `$stages2` addresses the third
+        # one, and `number` carries that index into templates. An item is an
+        # ordinary node spec otherwise -- it can carry $children, edges, its own
+        # type, or override `number` for display without moving its id.
+        steps = spec.get("steps")
+        auto = spec.get("autoedges")
+        if steps is not None:
+            if not isinstance(steps, list):
+                raise ValueError(
+                    f"{SIGIL}{node_id}.steps: must be a list of step mappings, got {steps!r}"
+                )
+            for i, step in enumerate(steps):
+                if isinstance(step, str):  # bare string: the step's label
+                    step = {"label": step}
+                add_node(f"{node_id}{i}", {"number": i, **(step or {})}, node_id, node_type, "step")
+            # `autoedges:` draws the chain the order already implies: each step
+            # to the next one. A string names the edge type (`.edge--<type>`);
+            # `true` uses `next`. Steps stay free to declare edges of their own.
+            if auto:
+                record_explicit(node_id, [
+                    {
+                        "from": f"{SIGIL}{node_id}{i}",
+                        "to": f"{SIGIL}{node_id}{i + 1}",
+                        "type": auto if isinstance(auto, str) else "next",
+                    }
+                    for i in range(len(steps) - 1)
+                ])
+        elif auto:
+            raise ValueError(
+                f"{SIGIL}{node_id}.autoedges: only means something beside a `steps:` "
+                f"list -- there is no order to chain without one"
+            )
         for child_key, child_spec in children.items():
             add_node(_strip(str(child_key)), child_spec, node_id, node_type)
 

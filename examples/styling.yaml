@@ -1,0 +1,216 @@
+# Styling from the YAML: every idea in "Customizing appearance", one node each.
+#
+#   io-flow build examples/styling.yaml -o examples/styling.html
+#
+# Each node's own text says which feature drew it, so the built HTML is the
+# documentation -- open styling.html and read the boxes.
+
+title: Styling a diagram from its YAML
+
+types:
+  # A declaration is Jinja per slot. `title`/`badge`/`meta` fill values; the
+  # packaged node.html.j2 draws the markup around them. A meta line that
+  # renders blank is dropped, which is why `note` can be absent below.
+  stage:
+    badge: stage
+    meta:
+      - "{{ data.note }}"
+    # Properties get wrapped in `.node--stage { ... }`. A block that writes its
+    # own selectors is emitted verbatim instead -- the only way to style a class
+    # that isn't a type name, like the `flagged` used further down.
+    css: |
+      .node--stage { border-left: 4px solid #2563eb; }
+      .flagged { outline: 2px dashed #b45309; outline-offset: 3px; }
+
+  # `extends:` inherits fields (nearest wins: the badge here, stage's meta) and
+  # the parent's CSS class, so the node comes out `node--urgent node--stage`
+  # and .node--urgent overrides .node--stage through the ordinary cascade.
+  urgent:
+    extends: stage
+    badge: "!"
+    css: "border-left-color: #dc2626; background: #fef2f2;"
+
+  # `class:` adds classes without inheriting anything else -- a look shared by
+  # types with no structural relationship. `.chip` is not a type, so its rules
+  # come from a verbatim css block.
+  chip:
+    class: [chip]
+    title: "{{ label }}"
+    css: |
+      .chip { border-radius: 999px; padding: 2px 14px; background: #ecfdf5; }
+      .chip .node__title { font-size: 12px; }
+
+  # A field is a value; a block is the markup around it. `meta:` would fill the
+  # standard loop -- `blocks: {meta: ...}` replaces that loop outright, which is
+  # how you get a <ul> where meta lines would have been. `fields` is the node's
+  # own data minus the reserved keys (type/label/class) and relation blocks.
+  listing:
+    badge: fields
+    blocks:
+      meta: |
+        <ul style="margin: 4px 0 0; padding-left: 16px">
+        {% for k, v in fields.items() if k != "code" %}<li><code>{{ k }}</code> {{ v }}</li>{% endfor %}
+        </ul>
+
+  # `template:` is a whole template written in the YAML -- it owns the wrapper
+  # element, `classes` and `data-node-id` included, exactly like a file does.
+  stamp:
+    template: |
+      <div class="{{ classes }}" data-node-id="{{ id }}">
+        <div class="node__header"><div class="node__title">{{ label | upper }}</div></div>
+      </div>
+    css: "letter-spacing: 0.08em; background: #1e293b; color: #e2e8f0;"
+
+  # Extending a compound type brings its children mount along, so this holds
+  # nodes *and* gets the group look.
+  lane:
+    extends: group
+    css: "background: #f8fafc;"
+
+  # `sidebar:` replaces the generic data dump in the detail panel. Click the
+  # node in the built HTML to see it.
+  documented:
+    badge: doc
+    sidebar: "<dl><dt>why</dt><dd>{{ data.why }}</dd></dl>"
+
+# Every node carries a `code:` field holding the YAML that made it -- its own
+# declaration, plus the type declaration doing the styling. Click a node in the
+# built HTML and the sidebar shows the source beside the result. (A multi-line
+# data value renders as a <pre> block; that is the generic sidebar dump, not
+# anything this file declares.)
+nodes:
+  $declared:
+    type: stage
+    label: A declaration fills slots
+    note: badge + meta came from types.stage
+    code: |
+      stage:
+        badge: stage
+        meta:
+          - "{{ data.note }}"
+
+      $declared:
+        type: stage
+        note: badge + meta came from types.stage
+
+  $inherited:
+    type: urgent
+    label: extends stage
+    note: kept stage's meta, replaced its badge
+    code: |
+      urgent:
+        extends: stage
+        badge: "!"
+        css: "border-left-color: #dc2626; background: #fef2f2;"
+
+      $inherited:
+        type: urgent
+        note: kept stage's meta, replaced its badge
+
+  $one_off:
+    type: stage
+    label: class on the node
+    # Styling for this one node, no type invented for it. It lands last on the
+    # wrapper, after everything the type contributed. Reserved like type: and
+    # label:, so it stays out of `fields`.
+    class: flagged
+    note: class="... node--stage flagged"
+    code: |
+      $one_off:
+        type: stage
+        class: flagged
+        note: class="... node--stage flagged"
+
+  $rounded:
+    type: chip
+    label: class on the type
+    code: |
+      chip:
+        class: [chip]
+        title: "{{ label }}"
+        css: |
+          .chip { border-radius: 999px; padding: 2px 14px; background: #ecfdf5; }
+          .chip .node__title { font-size: 12px; }
+
+      $rounded:
+        type: chip
+
+  $blocked:
+    type: listing
+    label: blocks replace markup
+    depth: 12
+    owner: queue-team
+    code: |
+      listing:
+        badge: fields
+        blocks:
+          meta: |
+            <ul style="margin: 4px 0 0; padding-left: 16px">
+            {% for k, v in fields.items() if k != "code" %}<li><code>{{ k }}</code> {{ v }}</li>{% endfor %}
+            </ul>
+
+      $blocked:
+        type: listing
+        depth: 12
+        owner: queue-team
+
+  $stamped:
+    type: stamp
+    label: its own template
+    code: |
+      stamp:
+        template: |
+          <div class="{{ classes }}" data-node-id="{{ id }}">
+            <div class="node__header"><div class="node__title">{{ label | upper }}</div></div>
+          </div>
+        css: "letter-spacing: 0.08em; background: #1e293b; color: #e2e8f0;"
+
+      $stamped:
+        type: stamp
+
+  $lane:
+    type: lane
+    label: extends group
+    code: |
+      lane:
+        extends: group
+        css: "background: #f8fafc;"
+
+      $lane:
+        type: lane
+    $member:
+      type: documented
+      label: has its own sidebar
+      why: sidebar - is inline Jinja for the detail panel
+      # No `code:` here: this node's sidebar is its type's, so the generic dump
+      # (and the <pre> it would render in) never runs.
+
+  # Ordered children: no id per step. Position is identity -- id is the
+  # parent's plus the index, and that index arrives as `number`, which the
+  # packaged `step` type puts in the badge. `$pipeline1` addresses the second.
+  $pipeline:
+    type: steps
+    label: steps - ordered children
+    autoedges: true           # chain them: step -> next step, class edge--next
+    steps:
+      - collect                 # bare string: the label
+      - label: transform
+        class: flagged          # a step is an ordinary node spec
+      - publish
+    code: |
+      $pipeline:
+        type: steps
+        autoedges: true
+        steps:
+          - collect
+          - label: transform
+            class: flagged
+          - publish
+
+  # No declaration at all: still renders, still takes .node--undeclared.
+  $plain:
+    type: undeclared
+    label: undeclared types still render
+    code: |
+      $plain:
+        type: undeclared

@@ -73,6 +73,10 @@ window.IOFlow = window.IOFlow || {};
   const CODE_KEYS = new Set(["cli", "loc"]);
   const fmtValue = (k, v) => {
     if (v && typeof v === "object") return fmtMap(v);
+    // A multi-line string is a block, not a row: keep its whitespace (a `code:`
+    // field holding YAML or a snippet reads as one run-on line otherwise).
+    if (typeof v === "string" && v.includes("\n"))
+      return `<pre><code>${esc(v.trimEnd())}</code></pre>`;
     if (CODE_KEYS.has(k)) return `<code>${esc(v)}</code>`;
     return esc(v);
   };

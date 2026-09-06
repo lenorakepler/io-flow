@@ -112,6 +112,10 @@ Inside a node's mapping:
   invisible grouping tier, e.g. every sankey source in one column. Lower
   tiers sit earlier in the layout direction. Only shapes the ELK draft;
   saved layouts still win.
+- **`class:`** — extra CSS classes for this one node, added after everything
+  its type contributed (type declarations have a `class:` of their own, below).
+- **`steps:`** — ordered children whose position is their identity, and
+  **`autoedges:`** — chain them in that order (below).
 - **relation names** (`args`/`calls`/`returns`/registered) — edge blocks.
 - **`edges:`** — a locally-declared explicit-edge list, handy for keeping a
   group's internal wiring inside the group. An omitted `from`/`to` defaults
@@ -265,6 +269,39 @@ defaults:
   _root: input
 ```
 
+**Ordered children.** A pipeline's stages are a list, not eight nodes that each
+need a name. `steps:` says so: position *is* identity, so the id is the parent's
+plus the index and the index arrives as `number` in the node's data.
+
+```yaml
+nodes:
+  $stages:
+    type: steps
+    steps:
+      - Project Setup                    # bare string: the label
+      - label: Paper Ingestion           # or a full node spec
+        $ingest_cli: {type: file}        # children, edges, type: all still work
+      - label: Eval Drafting
+        calls: {$stages0: retry}         # `$stages<n>` addresses the nth step
+
+  $runner: {calls: {$stages1: ""}}       # ...from anywhere, like any other id
+```
+
+`autoedges:` draws the chain the order already implies — each step to the next.
+`true` types those edges `next` (so `.edge--next` styles them); a string names
+the type instead (`autoedges: then`). Steps keep declaring edges of their own
+either way. It's an error beside anything but a `steps:` list, since there's no
+order to chain.
+
+Steps get `type: step` (a badge carrying the number) unless the item says
+otherwise or `defaults:` does — `defaults: {steps: stage}` types a whole list at
+once. Numbering is 0-based so the id and the `number` agree; setting `number:`
+on an item changes only what renders, never the id.
+
+The trade is the obvious one: **reordering the list renumbers everything after
+it**, so references and saved layout positions follow position, not content.
+Name the ones you point at (`$name:` children) if that matters more than terseness.
+
 **Layout config.** `diagram:` merges over the ELK defaults:
 
 ```yaml
@@ -290,6 +327,14 @@ touching engine code:
 - **type declarations** — one line of YAML per node type, plus Jinja HTML for
   anything bigger. No JavaScript involved: `templates.js` holds only a
   bare-title guard and the generic sidebar dump.
+
+[`examples/styling.yaml`](examples/styling.yaml) is this whole section as one
+diagram — every feature below drawn by a node that says which feature drew it.
+Build it and read the boxes beside the YAML:
+
+```bash
+io-flow build examples/styling.yaml -o styling.html   # or `edit` to poke at it live
+```
 
 ### Declaring a node type
 
@@ -353,9 +398,27 @@ write is markup; `{{ values }}` are escaped.
 | `title` | the name line (default `{{ label }}`) |
 | `badge` | the pill beside the title; omit for none |
 | `meta` | dimmer lines under the title — **a line that renders blank is dropped**, which is how "show `cli` only if there is one" stays a one-liner |
-| `blocks` | `{name: jinja}` replacing a block of the inherited template outright — reaches slots the fields above don't cover, and `{{ super() }}` appends instead of replacing |
+| `blocks` | `{name: jinja}` replacing a block of the inherited template outright — reaches what the fields above don't cover, and `{{ super() }}` appends instead of replacing |
 | `template` | a whole template written inline in the YAML — it owns the wrapper element, exactly like a file, and may itself `{% extends "node.html" %}` |
 | `sidebar` | inline Jinja for the detail panel, instead of the generic data dump |
+
+`title`/`badge`/`meta` are also the names of blocks in `node.html.j2`, which is
+the one thing here worth reading twice. **The field is the value; the block is
+the markup around it.** A declaration's `title:` fills a variable the template
+draws as `<div class="node__title">…</div>`; `blocks: {title: …}` replaces that
+markup outright. `meta:` only looks different because its value is a *list* and
+its block is the loop over it:
+
+```yaml
+function:
+  meta: ["{{ data.loc }}"]                    # your content, standard markup
+function:
+  blocks: {meta: "<p>{{ data.loc }}</p>"}     # no loop, no .node__meta at all
+```
+
+So: standard look with your content → the field. Different markup → the block.
+`node.html.j2` line `{{ title | default(label, true) }}` is the seam — say
+nothing and the node's `label` fills in.
 
 #### Inheriting
 
@@ -391,6 +454,19 @@ gives you its template (header plus children mount), its fields, and
 adds classes, for a look shared by types with nothing else in common. `css:` is
 not inherited or merged: a child already gets its parent's rules via the
 parent's class, so declaring `css:` twice would emit it twice.
+
+A node can carry `class:` too, for a one-off that doesn't deserve a type:
+
+```yaml
+nodes:
+  $queue:
+    type: queue
+    class: warn        # -> class="node node--queue warn"
+```
+
+It lands last on the wrapper, after everything the type contributed, and it is
+a reserved key like `type:` and `label:` — styling for this one node, so it
+doesn't show up in `fields`.
 
 Omit `extends` and the template follows the node: `group.html` when something
 is parented to it, `node.html` otherwise — compound-ness is a state, not a type.
@@ -483,7 +559,7 @@ actually care about:
 {% block header %}<span class="node__title">{{ label }}</span>{% endblock %}
 ```
 
-Blocks available: `title`, `badge`, `meta`, `children` in `node.html`; `rows`
+Blocks available: `header`, `title`, `badge`, `meta`, `children` in `node.html`; `rows`
 in `_sidebar.html`. `{{ super() }}` inside a block renders the default content, so you
 can add to it instead of replacing it. A `blocks:` entry in a declaration does
 the same thing from YAML, so a file is only needed for markup a line can't hold.

@@ -71,6 +71,17 @@ class:
   meta:
     - "{{ data.loc }}"
 
+# Ordered children: a node's `steps:` list becomes child nodes numbered by
+# position -- id `<parent><i>`, `number: <i>` in their data -- so nothing needs
+# an id of its own and `$stages2` still addresses the third one. Steps land on
+# `step` unless the item says otherwise (or `defaults:` does); `autoedges:`
+# beside the list chains each step to the next.
+steps:
+  extends: group
+
+step:
+  badge: "{{ data.number }}"
+
 # `group.html` is the template for a node that holds children; every node with
 # children renders through it whether or not it says so. Declaring
 # `extends: group` is how a type asks for the group *look* as well.

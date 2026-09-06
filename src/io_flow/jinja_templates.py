@@ -251,11 +251,12 @@ def prerender(
 
     types = load_types(directory, graph.get("types"))
 
-    # `fields` is a node's own data: everything except the two reserved keys and
+    # `fields` is a node's own data: everything except the reserved keys and
     # the relation blocks, which are wiring the viewer already draws as edges.
     # The parser records the document's relation names (`relations:` can add to
     # the built-ins), so a hand-built graph falls back to those built-ins.
-    reserved = {"type", "label", *(graph.get("relation_keys") or EDGE_KEYS)}
+    # `class` is reserved too: it is styling for this one node, not a field.
+    reserved = {"type", "label", "class", *(graph.get("relation_keys") or EDGE_KEYS)}
 
     # A declaration's `template:` is a whole template written in the YAML. Name
     # it like a file so it can be extended, inherited and shadowed the same way:
@@ -283,8 +284,14 @@ def prerender(
             },
             "parent": node.get("parent"),
             # The whole class attribute the wrapper should carry: `node`, this
-            # node's own type, then everything it inherited.
-            "classes": " ".join(["node", f"node--{node['type']}", *(classes or [])]),
+            # node's own type, everything it inherited, then the node's own
+            # `class:` last, so a one-off beats what its type asked for.
+            "classes": " ".join([
+                "node",
+                f"node--{node['type']}",
+                *(classes or []),
+                *_as_list((node.get("data") or {}).get("class")),
+            ]),
         }
 
     def render(name: str, node: dict[str, Any], classes=None, **extra_ctx) -> str:

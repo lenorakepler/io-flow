@@ -768,6 +768,73 @@ def test_explicit_type_beats_defaults():
     assert _node(graph, "c")["type"] == "class"
 
 
+def test_steps_number_children_by_position():
+    """`steps:` trades per-node ids for order: id is parent + index."""
+    graph = parse(
+        {
+            "nodes": {
+                "$stages": {
+                    "type": "steps",
+                    "steps": [
+                        "Project Setup",                      # bare string: the label
+                        {"label": "Ingestion", "$sub": {}},   # a step is a node spec
+                        {"label": "Eval", "type": "urgent", "number": 99},
+                    ],
+                },
+                "$runner": {"calls": {"$stages1": ""}},       # addressable by position
+            }
+        }
+    )
+    ids = [n["id"] for n in graph["nodes"]]
+    assert ids[:4] == ["stages", "stages0", "stages1", "sub"]  # declaration order kept
+    assert _node(graph, "stages0")["label"] == "Project Setup"
+    assert [_node(graph, f"stages{i}")["data"]["number"] for i in range(3)] == [0, 1, 99]
+    assert _node(graph, "sub")["parent"] == "stages1"
+    # Untyped steps land on `step`; the item's own type still wins.
+    assert _node(graph, "stages0")["type"] == "step"
+    assert _node(graph, "stages2")["type"] == "urgent"
+    assert ("runner", "stages1") in _edge_set(graph)
+    # The list itself is wiring, not sidebar data.
+    assert "steps" not in _node(graph, "stages")["data"]
+
+
+def test_defaults_beat_the_step_fallback():
+    graph = parse(
+        {
+            "defaults": {"steps": "stage"},
+            "nodes": {"$s": {"type": "steps", "steps": ["one"]}},
+        }
+    )
+    assert _node(graph, "s0")["type"] == "stage"
+
+
+def test_steps_must_be_a_list():
+    with pytest.raises(ValueError, match="steps: must be a list"):
+        parse({"nodes": {"$s": {"steps": {"label": "one"}}}})
+
+
+def test_autoedges_chains_the_steps_in_order():
+    graph = parse(
+        {
+            "nodes": {
+                "$s": {"autoedges": True, "steps": ["one", "two", "three"]},
+                "$t": {"autoedges": "then", "steps": ["a", "b"]},
+            }
+        }
+    )
+    assert _labeled_edges_typed(graph) == {
+        ("s0", "s1", "next"),
+        ("s1", "s2", "next"),
+        ("t0", "t1", "then"),  # a string names the edge type
+    }
+    assert "autoedges" not in _node(graph, "s")["data"]
+
+
+def test_autoedges_without_steps_is_an_error():
+    with pytest.raises(ValueError, match="autoedges: only means something"):
+        parse({"nodes": {"$s": {"autoedges": True}}})
+
+
 def test_style_block_parsed_and_validated():
     graph = parse({"style": {"skin": "codemap"}, "nodes": {"$a": {}}})
     assert graph["style"] == {"skin": ["codemap"]}
