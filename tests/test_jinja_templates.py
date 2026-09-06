@@ -178,6 +178,32 @@ def test_unknown_parent_and_cycles_are_loud(tmp_path):
             emit.build_html(parse_file(src))
 
 
+def test_fields_is_data_without_reserved_or_relation_keys(tmp_path):
+    """`fields` is what a list-style type iterates: the node's own data, minus
+    type/label and minus any relation block -- including registered ones."""
+    src = tmp_path / "d.yaml"
+    src.write_text(
+        "relations: {emits: {direction: out}}\n"
+        "types:\n"
+        "  bag:\n"
+        "    blocks:\n"
+        "      meta: '{% for k, v in fields.items() %}<li>{{ k }}={{ v }}</li>{% endfor %}'\n"
+        "nodes:\n"
+        "  $cfg: {type: file}\n"
+        "  $box:\n"
+        "    type: bag\n"
+        "    label: Box\n"
+        "    owner: ops\n"
+        "    args: {path: $cfg}\n"
+        "    emits: {$cfg: ''}\n",
+        encoding="utf-8",
+    )
+    html = _embedded(emit.build_html(parse_file(src)))["box"]["html"]
+    assert "<li>owner=ops</li>" in html
+    for excluded in ("type=", "label=", "args=", "emits="):
+        assert excluded not in html
+
+
 def test_blocks_replace_a_base_block_from_yaml(tmp_path):
     """`blocks:` reaches the slots the title/badge/meta sugar doesn't cover, so
     a one-line type never needs a one-line file."""

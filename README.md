@@ -407,6 +407,24 @@ artifact rather than assembled by JavaScript at mount time. `classes` is
 re-adds `.node` and the id defensively, so a template that drops them still
 works — but keep them.
 
+#### A type that just lists its data
+
+`fields` is `data` with the noise removed — no `type`/`label`, no relation
+blocks, including any your `relations:` block registered:
+
+```yaml
+types:
+  bag:
+    blocks:
+      meta: '{% for k, v in fields.items() %}<div class="node__meta"><b>{{ k }}</b>: {{ v }}</div>{% endfor %}'
+nodes:
+  $box: {type: bag, owner: ops, region: us-east-1, args: {path: $cfg}}
+```
+
+renders `owner` and `region` and leaves `args` to the edge it draws. Swap the
+`meta` block for `template:` if you want a `<ul>` or `<dl>` rather than meta
+lines.
+
 #### Where declarations live
 
 Three layers, each merged over the last, **entry by entry** — reusing a name
@@ -497,7 +515,10 @@ bundled `codemap` skin is exactly that: a `codemap.sidebar.html.j2` covering eve
 type, which a `templates/<type>.sidebar.html` of yours overrides per type.
 
 Template context: `label` (falls back to the id), `id`, `type`, `data` (every
-non-reserved YAML key on the node), `parent`, and the whole `node`. Styling is
+non-`$` YAML key on the node), `fields` (`data` minus `type`/`label` and minus
+relation blocks like `args:`/`calls:` — what a list-style type iterates),
+`classes` (the wrapper's class attribute), `parent`, and the whole `node`.
+Styling is
 unchanged — write a `.node--<type>` rule in a `style: skin:` stylesheet.
 
 Per-project skins without editing the installed package:

@@ -469,6 +469,10 @@ def parse(data: dict[str, Any]) -> dict[str, Any]:
         unique.append(edge)
 
     graph: dict[str, Any] = {"nodes": nodes, "edges": unique}
+    # Which node keys were relation blocks rather than free data -- built-ins
+    # plus anything `relations:` registered. Templates use it (as `fields`) to
+    # list a node's own data without the wiring; build-time only.
+    graph["relation_keys"] = sorted(edge_keys)
     title = data.get("title")
     if isinstance(title, str) and title.strip():
         graph["title"] = title.strip()

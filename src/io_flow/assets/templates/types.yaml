@@ -6,7 +6,8 @@
 # `.node--<type>` CSS class, and get the generic sidebar.
 #
 # Every field is Jinja source, rendered with the node's own `label`, `id`,
-# `type`, `data`, `parent`. Markup in the field is markup; `{{ values }}` are
+# `type`, `data`, `fields` (data minus type/label and relation blocks),
+# `classes` and `parent`. Markup in the field is markup; `{{ values }}` are
 # escaped.
 #
 #   extends:  another type -- inherits its fields, its template and its CSS

@@ -188,9 +188,12 @@ def build_html(
     title = graph.get("title") or DEFAULT_TITLE
     out = shell.replace("/*__STYLES__*/", styles)
     out = out.replace("<!--__TITLE__-->", html.escape(str(title)))
-    # `style` and `types` are build-time concerns (paths, template sources) and
-    # are already rendered into each node; keep them out of the viewer JSON.
-    graph_json = {k: v for k, v in graph.items() if k not in ("style", "types")}
+    # `style`, `types` and `relation_keys` are build-time concerns (paths,
+    # template sources, parser bookkeeping) already rendered into each node;
+    # keep them out of the viewer JSON.
+    graph_json = {
+        k: v for k, v in graph.items() if k not in ("style", "types", "relation_keys")
+    }
     out = out.replace("/*__GRAPH__*/", _inline_json(graph_json))
     out = out.replace("<!--__SCRIPTS__-->", scripts_html)
     return out

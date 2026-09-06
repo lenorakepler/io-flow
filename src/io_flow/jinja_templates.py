@@ -56,6 +56,7 @@ from markupsafe import Markup
 from ruamel.yaml import YAML
 
 from .emit import ASSETS
+from .parser import EDGE_KEYS
 
 BASES = ASSETS / "templates"
 
@@ -245,6 +246,12 @@ def prerender(
 
     types = load_types(directory, graph.get("types"))
 
+    # `fields` is a node's own data: everything except the two reserved keys and
+    # the relation blocks, which are wiring the viewer already draws as edges.
+    # The parser records the document's relation names (`relations:` can add to
+    # the built-ins), so a hand-built graph falls back to those built-ins.
+    reserved = {"type", "label", *(graph.get("relation_keys") or EDGE_KEYS)}
+
     # A declaration's `template:` is a whole template written in the YAML. Name
     # it like a file so it can be extended, inherited and shadowed the same way:
     # a project's own `<type>.html` file wins, an inline template beats the
@@ -266,6 +273,9 @@ def prerender(
             "type": node["type"],
             "label": node.get("label") or node["id"],
             "data": node.get("data") or {},
+            "fields": {
+                k: v for k, v in (node.get("data") or {}).items() if k not in reserved
+            },
             "parent": node.get("parent"),
             # The whole class attribute the wrapper should carry: `node`, this
             # node's own type, then everything it inherited.
