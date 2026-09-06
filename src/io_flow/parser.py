@@ -483,6 +483,24 @@ def parse(data: dict[str, Any]) -> dict[str, Any]:
     # own look; a CLI flag still overrides. Paths are resolved relative to the
     # YAML file in parse_file (parse() alone has no file to resolve against).
     # Not passed to the viewer -- consumed by emit at build time.
+    # Optional per-diagram node type declarations, same shape as a project's
+    # templates/types.yaml (see jinja_templates): {type: {extends/title/badge/
+    # meta/template/sidebar}}. Merged over the packaged and project ones at
+    # build time, so a diagram can describe a type it alone uses without a
+    # template file anywhere. Declaring is never *required* -- an undeclared
+    # type still renders. Build-time only; not passed to the viewer.
+    types = data.get("types")
+    if types is not None:
+        if not isinstance(types, dict):
+            raise ValueError("types: must be a mapping of type name -> declaration")
+        bad = [k for k, v in types.items() if not isinstance(v, dict)]
+        if bad:
+            raise ValueError(
+                f"types.{bad[0]}: must be a mapping "
+                f"(extends/title/badge/meta/template/sidebar)"
+            )
+        graph["types"] = {str(k): _plain(v) for k, v in types.items()}
+
     style = data.get("style")
     if style is not None:
         if not isinstance(style, dict):

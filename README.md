@@ -90,6 +90,7 @@ Top-level keys:
 - **`relations:`** — register new relationship kinds (below).
 - **`defaults:`** — default types for untyped nodes (below).
 - **`diagram:`** — per-diagram layout config (below).
+- **`types:`** — per-diagram node type declarations (below).
 - **`layout:`** — machine-owned block written by Save; don't edit by hand.
 
 Inside a node's mapping:
@@ -279,22 +280,65 @@ diagram:
 
 ## Customizing appearance (the whole point)
 
-Two files are the **entire modification surface** — change them without ever
+Two things are the **entire modification surface** — change them without ever
 touching engine code:
 
 - **`viewer.css`** — all node + edge appearance. Recolor a type, style an edge
   kind (`.edge--calls`), restyle the sidebar, tweak the dim opacity. The
   compound-header height lives in one place (`--header-h`).
-- **`templates.js`** — the `type → HTML` map for nodes, plus the optional
-  `IOF.sidebars` map for per-type sidebar detail (types without an entry get a
-  generic dump of their data keys). Adding a node type = one function here +
-  one CSS rule.
+- **type declarations** — one line of YAML per node type, plus Jinja HTML for
+  anything bigger. No JavaScript: `templates.js` now holds only a defensive
+  guard and the generic sidebar dump.
 
-### Adding a node type without writing JavaScript
+### Declaring a node type
 
-Point `--templates` (or `style: templates:`) at a **directory** instead of a
-`.js` file and each `<type>.html` in it becomes that type's template — plain
-HTML with `{{ }}`, rendered by Jinja in Python at build time:
+A type is a line. The built-in ones live in the packaged
+`assets/templates/types.yaml`, and you add or replace entries in three places,
+each merged over the last: a project's `templates/types.yaml`, then the
+diagram's own top-level `types:` block.
+
+```yaml
+# in the diagram itself — no file anywhere
+types:
+  queue:
+    badge: queue                                  # the pill beside the title
+    meta: ["{% if data.depth %}{{ data.depth }} waiting{% endif %}"]
+  stage:
+    extends: _compound                            # a node that holds children
+    meta: ["{{ data.loc }}"]
+  gate:
+    template: '<div class="node__title">|{{ label }}|</div>'   # inline, no file
+nodes:
+  $inbox: {type: queue, depth: 12}
+```
+
+Fields — every one is Jinja source, rendered with the node's own `label`, `id`,
+`type`, `data`, `parent`. Markup you write is markup; `{{ values }}` are escaped.
+
+| field | does |
+|---|---|
+| `extends` | base to render: `_simple` (default) or `_compound` (holds children) |
+| `title` | the name line (default `{{ label }}`) |
+| `badge` | the pill beside the title; omit for none |
+| `meta` | dimmer lines under the title — **a line that renders blank is dropped**, which is how "show `cli` only if there is one" stays a one-liner |
+| `template` | a whole inline body, instead of `extends`/`title`/`badge`/`meta` |
+| `sidebar` | inline Jinja for the detail panel, instead of the generic dump |
+
+Declaring is never *required*: an undeclared type renders the base its children
+call for — `_compound` when something is parented to it, `_simple` otherwise,
+since compound-ness is a state and not a type — still gets its `.node--<type>`
+class, still gets the generic sidebar. An explicit `extends:` overrides that
+inference. And nothing is registered — `type: whatever` needs no entry anywhere.
+
+The built-in types, for reference: `file`, `option`, `parameter` (badged),
+`function`, `method` (`()` suffix), `class`, `group` (compound), `attributes`,
+`input`, `node`. Read `assets/templates/types.yaml` — it is ten short entries.
+
+### When a line isn't enough: template files
+
+Point `--templates` (or `style: templates:`) at a **directory** and each
+`<type>.html` in it becomes that type's template, winning over its declaration
+— plain HTML with `{{ }}`, rendered by Jinja in Python at build time:
 
 ```
 my-diagram.yaml
@@ -313,31 +357,26 @@ file type), so `{# comments #}` and tags highlight instead of reading as broken
 HTML.
 
 The filename is the registration — no map, no closure, and values are
-autoescaped, so there is no `esc()` to forget. A type with **no** `<type>.html`
-falls through to the packaged `templates.js`, so the two surfaces mix freely and
-you can convert one type at a time. Nodes are rendered once at mount, so baking
-the HTML in at build time loses nothing and ships no template engine in the
-artifact.
+autoescaped, so there is no `esc()` to forget. Reach for a file when the type
+needs loops, nested structure or a `<pre>`; a badge and two meta lines are a
+`types.yaml` line, not a file. Nodes are rendered once at mount, so baking the
+HTML in at build time loses nothing and ships no template engine in the artifact.
 
-Reuse is Jinja inheritance. A new type that looks like an existing one is a
-one-line file:
+A file can extend the same bases the declarations use, and override one block:
 
-```html
-{% extends "_simple.html" %}                        <!-- title + type badge -->
-```
 ```html
 {% extends "_compound.html" %}                      <!-- a node holding children -->
 {% block header %}<span class="node__title">{{ label }}</span>{% endblock %}
 ```
 
-`_simple.html` and `_compound.html` ship with io-flow (as `.html.j2` files —
-`{% extends %}` finds either spelling; a template of your own with that name
-shadows the packaged one). `_compound.html` also documents the four
-non-obvious CSS rules a compound node needs. **Names come from the node's own
-type, never from the template it inherited** — the wrapper's `node--<type>`
+`_simple.html`, `_compound.html` and `_sidebar.html` ship with io-flow (as
+`.html.j2` files — `{% extends %}` finds either spelling; a template of your own
+with that name shadows the packaged one). `_compound.html` also documents the
+four non-obvious CSS rules a compound node needs. **Names come from the node's
+own type, never from the template it inherited** — the wrapper's `node--<type>`
 class is set by the engine from `node.type`, and `{{ type }}` inside a template
 is likewise the node's own, so one shared structure renders correct per-type
-classes and badges. Two types sharing a look = two one-line files.
+classes and badges.
 
 `<type>.sidebar.html` in the same directory does the same for the detail panel,
 independently — a type can have a body template, a sidebar template, both, or

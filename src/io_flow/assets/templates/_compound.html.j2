@@ -1,5 +1,11 @@
 {# Base: a compound node -- one that holds children.
 
+   Usually reached from a `types.yaml` declaration:
+
+       group: {extends: _compound, meta: ["{{ data.loc }}"]}
+
+   or extended directly by a `templates/<type>.html.j2` file:
+
        {% extends "_compound.html" %}
        {% block header %}<span class="node__title">{{ label }}</span>{% endblock %}
 
@@ -20,5 +26,5 @@
 
    (`--header-h` is the single source of truth for header height -- layout
    padding, drag clamping and collapse all read it. Don't hardcode it.) #}
-<div class="node__header">{% block header %}<span class="node__title">{{ label }}</span>{% if data.loc %}<span class="node__meta">{{ data.loc }}</span>{% endif %}{% endblock %}</div>
+<div class="node__header">{% block header %}<span class="node__title">{{ title | default(label, true) }}</span>{% for line in meta | default([], true) %}<span class="node__meta">{{ line }}</span>{% endfor %}{% endblock %}</div>
 <div class="node__children"></div>

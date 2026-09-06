@@ -1,23 +1,34 @@
 """Jinja node templates: a directory of ``<type>.html``, rendered at build time.
 
-Pointing ``--templates`` (or ``style: templates:``) at a *directory* instead of a
-``.js`` file makes ``<type>.html`` -- or ``<type>.html.j2``, which editors
-highlight as Jinja -- the template for nodes of that type: plain HTML with
-``{{ }}``, no JavaScript. Rendering happens here, in Python, during
+A node type is a declaration -- one entry in a ``types.yaml`` naming a base and
+a few Jinja fragments (``title``/``badge``/``meta``, or a whole inline
+``template``). Three layers merge, entry by entry: the packaged
+``assets/templates/types.yaml``, a project's ``templates/types.yaml``, and a
+diagram's own top-level ``types:`` block. A type too big for a line gets a
+``<type>.html`` file -- or ``<type>.html.j2``, which editors highlight as Jinja
+-- in the templates directory, which wins over its declaration. Either way it is
+plain HTML with ``{{ }}``, no JavaScript. Rendering happens here, in Python, during
 the build: the result rides along on the node as ``html`` and ``templates.js``
 hands it straight to the engine. Nothing re-renders a node in the browser
 (``engine/viewer.js`` mounts each node exactly once), so baking it in at build
 time costs nothing and keeps the artifact free of template machinery.
 
-A type with no ``<type>.html`` falls through to the packaged ``templates.js``
-map, so the two surfaces mix freely -- convert one type at a time.
-``<type>.sidebar.html`` does the same for the detail panel, independently: a
-type may have a body template, a sidebar template, both, or neither.
+Declaring is never required: a type with neither a declaration nor a file
+renders the base its children call for -- ``_compound`` when something is
+parented to the node, ``_simple`` otherwise -- since compound-ness is a state,
+not a type. An ``extends:`` in the declaration overrides that inference.
+``<type>.sidebar.html`` -- or a declaration's ``sidebar:`` string -- does the
+same for the detail panel, independently: a type may have a body, a sidebar,
+both, or neither.
 
-Reuse is Jinja inheritance. A new type that looks like an existing one is a
-one-line file::
+Reuse is a base plus slots::
 
-    {# templates/queue.html #}
+    # types.yaml
+    queue: {badge: queue, meta: ["{{ data.depth }} waiting"]}
+
+or, for a file, Jinja inheritance::
+
+    {# templates/queue.html.j2 #}
     {% extends "_simple.html" %}
 
 ``assets/templates/`` ships ``_simple.html``, ``_compound.html`` and
@@ -38,6 +49,8 @@ from pathlib import Path
 from typing import Any
 
 from jinja2 import ChainableUndefined, Environment, FileSystemLoader, TemplateError
+from markupsafe import Markup
+from ruamel.yaml import YAML
 
 from .emit import ASSETS
 
@@ -73,6 +86,31 @@ def template_key(name: str) -> str | None:
         if name.endswith(suffix) and len(name) > len(suffix):
             return name[: -len(suffix)]
     return None
+
+
+TYPES_FILE = "types.yaml"
+
+
+def load_types(
+    directory: Path | None, diagram_types: dict[str, Any] | None = None
+) -> dict[str, dict[str, Any]]:
+    """Merge type declarations: packaged, then the project's ``templates/
+    types.yaml``, then the diagram's own ``types:`` block.
+
+    Entry by entry -- a later entry replaces the earlier one of that name
+    outright, so a type is described in one place, not assembled from three.
+    """
+    yaml = YAML(typ="safe")
+    types: dict[str, dict[str, Any]] = {}
+    for path in (BASES / TYPES_FILE, directory / TYPES_FILE if directory else None):
+        if path is None or not path.exists():
+            continue
+        loaded = yaml.load(path.read_text(encoding="utf-8")) or {}
+        if not isinstance(loaded, dict):
+            raise ValueError(f"{path}: must be a mapping of type name -> declaration")
+        types.update({str(k): dict(v or {}) for k, v in loaded.items()})
+    types.update({str(k): dict(v or {}) for k, v in (diagram_types or {}).items()})
+    return types
 
 
 def is_template_dir(templates: str | Path | None) -> bool:
@@ -114,33 +152,76 @@ def prerender(
         else {}
     )
 
-    def render(name: str, node: dict[str, Any]) -> str:
+    types = load_types(directory, graph.get("types"))
+
+    def context(node: dict[str, Any]) -> dict[str, Any]:
+        return {
+            "node": node,
+            "id": node["id"],
+            "type": node["type"],
+            "label": node.get("label") or node["id"],
+            "data": node.get("data") or {},
+            "parent": node.get("parent"),
+        }
+
+    def render(name: str, node: dict[str, Any], **extra_ctx) -> str:
         try:
-            return env.get_template(name).render(
-                node=node,
-                id=node["id"],
-                type=node["type"],
-                label=node.get("label") or node["id"],
-                data=node.get("data") or {},
-                parent=node.get("parent"),
-            )
+            return env.get_template(name).render(**context(node), **extra_ctx)
         except TemplateError as exc:
             raise ValueError(
                 f"{name}: {exc.__class__.__name__}: {exc} (rendering node ${node['id']})"
             ) from exc
 
+    def render_source(source: str, node: dict[str, Any], where: str) -> str:
+        """Render an inline Jinja string from a types.yaml declaration."""
+        try:
+            return env.from_string(source).render(context(node))
+        except TemplateError as exc:
+            raise ValueError(
+                f"types.yaml {node['type']}.{where}: {exc.__class__.__name__}: {exc} "
+                f"(rendering node ${node['id']})"
+            ) from exc
+
+    # Compound-ness is a state, not a type: which base a node gets follows from
+    # whether anything is parented to it, unless its declaration says otherwise.
+    parents = {n.get("parent") for n in graph["nodes"] if n.get("parent") is not None}
+
+    def from_declaration(spec: dict[str, Any], node: dict[str, Any]) -> str:
+        """Render a type's declaration: an inline body, or a base plus slots."""
+        if spec.get("template"):
+            return render_source(spec["template"], node, "template")
+        slots: dict[str, Any] = {}
+        for slot in ("title", "badge"):
+            if spec.get(slot):
+                slots[slot] = Markup(render_source(spec[slot], node, slot).strip())
+        # A meta line that renders blank is dropped -- that is how "show `cli`
+        # only when there is one" stays a one-liner instead of a conditional.
+        lines = [render_source(m, node, "meta").strip() for m in spec.get("meta") or []]
+        slots["meta"] = [Markup(line) for line in lines if line]
+        base = spec.get("extends") or (
+            "_compound" if node["id"] in parents else "_simple"
+        )
+        return render(f"{base}.html", node, **slots)
+
     nodes = []
     for node in graph["nodes"]:
-        # `<type>.html` is the node body; `<type>.sidebar.html` is its detail
-        # panel. Both are opt-in per type and independent -- a type can have
-        # either, both, or neither -- and a skin's default sidebar covers the
-        # types that named no sidebar template of their own.
+        # Body: `<type>.html` file, else the type's declaration. Sidebar:
+        # `<type>.sidebar.html` file, else the declaration's `sidebar:`, else a
+        # skin's default sidebar template. Every layer is optional; whatever is
+        # missing falls through to the packaged templates.js.
+        spec = types.get(node["type"]) or {}
         extra = {}
         if node["type"] in have:
             extra["html"] = render(have[node["type"]], node)
+        else:
+            # No declaration is itself a declaration: an empty spec renders the
+            # base its children (or lack of them) call for.
+            extra["html"] = from_declaration(spec, node)
         sidebar = f"{node['type']}.sidebar"
         if sidebar in have:
             extra["sidebar"] = render(have[sidebar], node)
+        elif spec.get("sidebar"):
+            extra["sidebar"] = render_source(spec["sidebar"], node, "sidebar")
         elif default_sidebar is not None:
             extra["sidebar"] = render(default_sidebar.name, node)
         nodes.append({**node, **extra} if extra else node)

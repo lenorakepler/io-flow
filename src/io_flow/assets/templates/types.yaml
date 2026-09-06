@@ -1,0 +1,70 @@
+# Node type declarations -- io-flow's built-in types, and the shape yours take.
+#
+# A project's own `templates/types.yaml` is merged over this one, entry by
+# entry: name a type here to add it, or reuse a name to replace that entry. Types
+# you never declare still work -- they render a bare title, take a
+# `.node--<type>` CSS class, and get the generic sidebar.
+#
+# Every field is Jinja source, rendered with the node's own `label`, `id`,
+# `type`, `data`, `parent`. Markup in the field is markup; `{{ values }}` are
+# escaped.
+#
+#   extends:  base template to render (default: _simple; _compound holds children)
+#   title:    the node's name line              (default: "{{ label }}")
+#   badge:    the pill beside the title         (omit for no badge)
+#   meta:     dimmer lines under the title; a line rendering blank is dropped,
+#             which is how "show `cli` only if there is one" works
+#   template: whole inline Jinja body, instead of extends/title/badge/meta
+#   sidebar:  inline Jinja for the detail panel, instead of the generic dump
+#
+# Anything too big for a line goes in `templates/<type>.html.j2`, which wins
+# over its declaration here.
+
+file:
+  badge: file
+  meta:
+    - "{% if data.cli %}<code>{{ data.cli }}</code>{% endif %}"
+    - "{{ data.value }}"
+
+option:
+  badge: option
+  meta:
+    - "{% if data.cli %}<code>{{ data.cli }}</code>{% endif %}"
+
+parameter:
+  badge: param
+  meta:
+    - "{% if data.value is defined %}= {{ data.value }}{% endif %}"
+
+# Callables mark themselves with () rather than a badge.
+function:
+  title: "{{ label }}()"
+  meta:
+    - "{{ data.loc }}"
+
+method:
+  title: "{{ label }}()"
+
+# Attribute bags: the wiring lives in the node's args: map; fall back to plain
+# data keys for bags declared without edges.
+attributes:
+  title: attributes
+  meta:
+    - "{{ (data.args or data) | reject('in', ['type', 'label']) | join(', ') }}"
+  sidebar: "<dl><dt>attributes</dt><dd>{% for k in (data.args or data) if k not in ['type', 'label'] %}<div><code>{{ k }}</code></div>{% endfor %}</dd></dl>"
+
+# Containers. Compound-ness is a state, not a type -- any node with children
+# gets a child mount -- but these two declare a header, so they collapse.
+class:
+  extends: _compound
+  meta:
+    - "{{ data.loc }}"
+
+group:
+  extends: _compound
+  meta:
+    - "{{ data.loc }}"
+
+# Bare title, no badge: the default shape, spelled out so the set is visible.
+input: {}
+node: {}

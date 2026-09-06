@@ -145,19 +145,19 @@ def build_html(
     # Skin css is appended after the base css, in order, so later entries win.
     skin_css, skin_js, skin_sidebars = skin_assets(skin)
 
-    # `templates` pointing at a *directory* means Jinja `<type>.html` templates;
-    # a skin may also carry a default sidebar template. Render both here, ride
-    # the results along on each node, and keep shipping the packaged
-    # templates.js as the fallback for whatever has no template.
+    # Node HTML is rendered here, from the packaged type declarations plus
+    # whatever a project's own templates dir adds (`templates` pointing at a
+    # *directory* rather than a .js file), plus a skin's default sidebar.
+    # Untyped/undeclared nodes come back without `html` and fall through to
+    # the packaged templates.js.
     from . import jinja_templates
 
     tpl_dir = templates if jinja_templates.is_template_dir(templates) else None
-    if tpl_dir is not None or skin_sidebars:
-        graph = jinja_templates.prerender(
-            graph, tpl_dir, default_sidebar=skin_sidebars[-1] if skin_sidebars else None
-        )
-        if tpl_dir is not None:
-            templates = None
+    graph = jinja_templates.prerender(
+        graph, tpl_dir, default_sidebar=skin_sidebars[-1] if skin_sidebars else None
+    )
+    if tpl_dir is not None:
+        templates = None
 
     shell = _read("viewer.html")
     styles = Path(css).read_text(encoding="utf-8") if css else _read("viewer.css")
@@ -185,9 +185,9 @@ def build_html(
     title = graph.get("title") or DEFAULT_TITLE
     out = shell.replace("/*__STYLES__*/", styles)
     out = out.replace("<!--__TITLE__-->", html.escape(str(title)))
-    # `style` is a build-time concern (and holds local filesystem paths); keep
-    # it out of the viewer JSON embedded in the artifact.
-    graph_json = {k: v for k, v in graph.items() if k != "style"} if "style" in graph else graph
+    # `style` and `types` are build-time concerns (paths, template sources) and
+    # are already rendered into each node; keep them out of the viewer JSON.
+    graph_json = {k: v for k, v in graph.items() if k not in ("style", "types")}
     out = out.replace("/*__GRAPH__*/", _inline_json(graph_json))
     out = out.replace("<!--__SCRIPTS__-->", scripts_html)
     return out

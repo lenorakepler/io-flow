@@ -7,6 +7,7 @@ import json
 import pytest
 
 from io_flow import emit
+from io_flow.parser import parse_file
 from io_flow.server import LayoutServer
 
 
@@ -27,17 +28,101 @@ def _embedded(html):
     return {n["id"]: n for n in json.loads(body)["nodes"]}
 
 
-def test_type_template_renders_and_untemplated_type_falls_back(tmp_path):
+def test_packaged_declarations_render_the_builtin_types():
+    """The ten built-in types are types.yaml entries now, not JS functions."""
+    g = _graph("file", "parameter", "function", "class")
+    g["nodes"][0]["data"] = {"cli": "--config", "value": "config.yaml"}
+    g["nodes"][1]["data"] = {"value": 60}
+    nodes = _embedded(emit.build_html(g))
+    assert '<span class="node__badge">file</span>' in nodes["file"]["html"]
+    assert "<code>--config</code>" in nodes["file"]["html"]
+    assert '<span class="node__badge">param</span>' in nodes["parameter"]["html"]
+    assert "= 60" in nodes["parameter"]["html"]
+    # Callables mark themselves with () and carry no badge.
+    assert "function()" in nodes["function"]["html"]
+    assert "node__badge" not in nodes["function"]["html"]
+    # Compound types keep both load-bearing mounts.
+    assert 'class="node__header"' in nodes["class"]["html"]
+    assert 'class="node__children"' in nodes["class"]["html"]
+
+
+def test_blank_meta_lines_are_dropped():
+    """`show cli only if there is one` is a one-liner, not a conditional."""
+    g = _graph("option")
+    g["nodes"][0]["data"] = {}
+    assert "node__meta" not in _embedded(emit.build_html(g))["option"]["html"]
+
+
+def test_project_types_yaml_declares_and_overrides(tmp_path):
+    d = tmp_path / "templates"
+    d.mkdir()
+    (d / "types.yaml").write_text(
+        "queue: {badge: queue, meta: ['{{ data.depth }} waiting']}\n"
+        "method: {title: '{{ label }} [m]'}\n",  # replaces the packaged entry
+        encoding="utf-8",
+    )
+    g = _graph("queue", "method")
+    g["nodes"][0]["data"] = {"depth": 12}
+    nodes = _embedded(emit.build_html(g, templates=d))
+    assert '<span class="node__badge">queue</span>' in nodes["queue"]["html"]
+    assert '<div class="node__meta">12 waiting</div>' in nodes["queue"]["html"]
+    assert "method [m]" in nodes["method"]["html"]
+    assert "method()" not in nodes["method"]["html"]
+
+
+def test_diagram_types_block_extends_types_per_document(tmp_path):
+    """A diagram can describe a type it alone uses, with no file anywhere."""
+    src = tmp_path / "d.yaml"
+    src.write_text(
+        "types:\n"
+        "  queue: {badge: queue, meta: ['{{ data.depth }} waiting']}\n"
+        "  gate: {template: '<div class=\"node__title\">|{{ label }}|</div>'}\n"
+        "nodes:\n"
+        "  $inbox: {type: queue, depth: 12}\n"
+        "  $g: {type: gate}\n",
+        encoding="utf-8",
+    )
+    nodes = _embedded(emit.build_html(parse_file(src)))
+    assert '<div class="node__meta">12 waiting</div>' in nodes["inbox"]["html"]
+    assert nodes["g"]["html"] == '<div class="node__title">|g|</div>'
+
+
+def test_declared_sidebar_string_beats_the_skins_default(tmp_path):
+    skin = tmp_path / "plain.sidebar.html"
+    skin.write_text("GENERIC", encoding="utf-8")
+    src = tmp_path / "d.yaml"
+    src.write_text(
+        "types: {queue: {sidebar: '<dl><dt>depth</dt><dd>{{ data.depth }}</dd></dl>'}}\n"
+        "nodes: {$inbox: {type: queue, depth: 12}, $other: {type: gate}}\n",
+        encoding="utf-8",
+    )
+    nodes = _embedded(emit.build_html(parse_file(src), skin=str(skin)))
+    assert nodes["inbox"]["sidebar"] == "<dl><dt>depth</dt><dd>12</dd></dl>"
+    assert nodes["other"]["sidebar"] == "GENERIC"
+
+
+def test_type_template_wins_and_undeclared_types_get_a_base(tmp_path):
     d = tmp_path / "templates"
     d.mkdir()
     (d / "queue.html").write_text(
         '<div class="node__title">{{ label }} ({{ data.loc }})</div>', encoding="utf-8"
     )
-    nodes = _embedded(emit.build_html(_graph("queue", "function"), templates=d))
+    nodes = _embedded(emit.build_html(_graph("queue", "widget"), templates=d))
     assert nodes["queue"]["html"] == '<div class="node__title">queue (queue.py)</div>'
-    # No queue.js template shadowing: the packaged templates.js still ships as
-    # the fallback, and the untemplated type carries no prerendered html.
-    assert "html" not in nodes["function"]
+    # `widget` is neither declared nor templated: it still renders, via _simple.
+    assert nodes["widget"]["html"] == '<div class="node__title">widget</div>\n'
+
+
+def test_undeclared_type_gets_compound_when_it_has_children():
+    """Compound-ness is a state, not a type: the base follows the children."""
+    g = _graph("widget")
+    g["nodes"].append(
+        {"id": "kid", "type": "widget", "parent": "widget", "label": "kid", "data": {}}
+    )
+    nodes = _embedded(emit.build_html(g))
+    parent, child = nodes["widget"]["html"], nodes["kid"]["html"]
+    assert 'class="node__header"' in parent and 'class="node__children"' in parent
+    assert "node__children" not in child
 
 
 def test_inherited_template_takes_names_from_the_nodes_own_type(tmp_path):
@@ -45,7 +130,11 @@ def test_inherited_template_takes_names_from_the_nodes_own_type(tmp_path):
     d = tmp_path / "templates"
     d.mkdir()
     for t in ("queue", "job"):
-        (d / f"{t}.html").write_text('{% extends "_simple.html" %}', encoding="utf-8")
+        (d / f"{t}.html").write_text(
+            '{% extends "_simple.html" %}'
+            '{% block badge %} <span class="node__badge">{{ type }}</span>{% endblock %}',
+            encoding="utf-8",
+        )
     nodes = _embedded(emit.build_html(_graph("queue", "job"), templates=d))
     assert '<span class="node__badge">queue</span>' in nodes["queue"]["html"]
     assert '<span class="node__badge">job</span>' in nodes["job"]["html"]
@@ -74,9 +163,9 @@ def test_sidebar_template_is_independent_of_the_body_template(tmp_path):
     (d / "queue.sidebar.html").write_text("<dl><dt>at</dt><dd>{{ data.loc }}</dd></dl>",
                                           encoding="utf-8")
     nodes = _embedded(emit.build_html(_graph("queue", "function"), templates=d))
-    # Sidebar without a body template: the body still falls back to templates.js.
+    # Sidebar without a body template: the body still comes from the base.
     assert nodes["queue"]["sidebar"] == "<dl><dt>at</dt><dd>queue.py</dd></dl>"
-    assert "html" not in nodes["queue"]
+    assert nodes["queue"]["html"] == '<div class="node__title">queue</div>\n'
     assert "sidebar" not in nodes["function"]
 
 
@@ -99,7 +188,11 @@ def test_html_j2_suffix_works_everywhere(tmp_path):
     `{% extends "_simple.html" %}` must still find the packaged base."""
     d = tmp_path / "templates"
     d.mkdir()
-    (d / "queue.html.j2").write_text('{% extends "_simple.html" %}', encoding="utf-8")
+    (d / "queue.html.j2").write_text(
+        '{% extends "_simple.html" %}'
+        '{% block badge %} <span class="node__badge">{{ type }}</span>{% endblock %}',
+        encoding="utf-8",
+    )
     (d / "queue.sidebar.html.j2").write_text("SIDEBAR", encoding="utf-8")
     skin = tmp_path / "plain.sidebar.html.j2"
     skin.write_text("GENERIC", encoding="utf-8")

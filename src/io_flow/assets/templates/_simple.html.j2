@@ -1,17 +1,18 @@
-{# Base: a plain node -- title, type badge, optional meta line.
+{# Base: a plain node -- title, optional type badge, optional meta lines.
 
-   A new type that looks like this is a one-line file:
+   Usually reached from a `types.yaml` declaration rather than by hand:
 
-       {% extends "_simple.html" %}
+       queue: {badge: queue, meta: ["{% if data.depth %}{{ data.depth }} waiting{% endif %}"]}
 
-   Override a piece without restating the rest:
+   which renders this file with `title` / `badge` / `meta` already built. A
+   `templates/<type>.html.j2` file can also extend it directly and override a
+   block; the declaration's values stay available as the block defaults.
 
-       {% extends "_simple.html" %}
-       {% block meta %}<div class="node__meta">{{ data.depth }} waiting</div>{% endblock %}
-
-   `type` is the NODE's own type, not this file's, so an inherited template
-   still renders the right badge -- and the engine sets the wrapper's
-   `node--<type>` class from the node too. Style a type with a `.node--<type>`
-   rule in your `style: skin:` css. #}
-<div class="node__title">{% block title %}{{ label }}{% endblock %}{% block badge %} <span class="node__badge">{{ type }}</span>{% endblock %}</div>
-{% block meta %}{% endblock %}
+   `type` is the NODE's own type, not this file's, so a shared template still
+   renders the right badge -- and the engine sets the wrapper's `node--<type>`
+   class from the node too. Style a type with a `.node--<type>` rule in your
+   `style: skin:` css. #}
+<div class="node__title">{% block title %}{{ title | default(label, true) }}{% endblock %}{% block badge %}{% if badge %} <span class="node__badge">{{ badge }}</span>{% endif %}{% endblock %}</div>
+{% block meta %}{% for line in meta | default([], true) %}
+<div class="node__meta">{{ line }}</div>
+{% endfor %}{% endblock %}

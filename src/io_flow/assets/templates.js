@@ -1,18 +1,18 @@
-/* templates.js — USER-EDITABLE SURFACE (1 of 2).
+/* templates.js — the viewer's last-resort renderers.
  *
- * Maps a node `type` to a function returning the node's *inner* HTML. The
- * engine owns the wrapper element (`<div class="node node--TYPE"
- * data-node-id="...">`) and the structural invariants; everything you see
- * inside a node is defined here. Pair each type with a `.node--<type>` rule in
- * viewer.css. Adding a new node type = add a function here + a CSS rule. No
- * engine edits required.
+ * Node appearance is NOT defined here any more. A node's inner HTML is rendered
+ * at build time in Python, from `assets/templates/types.yaml` (the built-in
+ * types), a project's `templates/types.yaml`, a diagram's own `types:` block,
+ * or a `templates/<type>.html.j2` file — see io_flow/jinja_templates.py and the
+ * "Adding a node type" section of the README. The result arrives on the node as
+ * `html`, and this file just hands it over.
  *
- * Contract:
- *  - Return an HTML string. Use `esc()` on any value that came from YAML.
- *  - Any node may contain children (compound-ness is a state, not a type).
- *    Include an element with class `node__children` to control where the
- *    engine mounts them; if the template omits it and the node has children,
- *    the engine appends a default mount at the end.
+ * Every node arrives with `html` — a type nobody declared still renders, via
+ * the `_simple` / `_compound` base its children (or lack of them) call for — so
+ * what is left here is a defensive guard, the generic sidebar dump for types
+ * with no `sidebar:` of their own, and the two helpers skins reuse (`IOF.esc`,
+ * `IOF.headerH`). A skin's JS may still reassign `IOF.renderNode` /
+ * `IOF.renderSidebar` wholesale — it loads after this file.
  */
 window.IOFlow = window.IOFlow || {};
 (function (IOF) {
@@ -38,78 +38,21 @@ window.IOFlow = window.IOFlow || {};
     return _headerH;
   };
 
-  const badge = (t) => `<span class="node__badge">${esc(t)}</span>`;
-  const meta = (t) => (t == null || t === "" ? "" : `<div class="node__meta">${esc(t)}</div>`);
-
   // Display name: `label` (set by the parser, defaults to the node id — methods
   // default to their short name). `id` stays the unique key used for wiring.
   const name = (n) => esc(n.label != null ? n.label : n.id);
 
-  const templates = {
-    file: (n) => `
-      <div class="node__title">${name(n)} ${badge("file")}</div>
-      ${n.data.cli ? `<div class="node__meta"><code>${esc(n.data.cli)}</code></div>` : ""}
-      ${meta(n.data.value)}
-    `,
-    option: (n) => `
-      <div class="node__title">${name(n)} ${badge("option")}</div>
-      ${n.data.cli ? `<div class="node__meta"><code>${esc(n.data.cli)}</code></div>` : ""}
-    `,
-    parameter: (n) => `
-      <div class="node__title">${name(n)} ${badge("param")}</div>
-      ${n.data.value !== undefined ? `<div class="node__meta">= ${esc(n.data.value)}</div>` : ""}
-    `,
-    input: (n) => `<div class="node__title">${name(n)}</div>`,
-    // Default type for nodes declared without `type:` (and the fallback for
-    // types with no template entry).
-    node: (n) => `<div class="node__title">${name(n)}</div>`,
-    function: (n) => `
-      <div class="node__title">${name(n)}()</div>
-      ${meta(n.data.loc)}
-    `,
-    method: (n) => `
-      <div class="node__title">${name(n)}()</div>
-    `,
-    attributes: (n) => {
-      // Attribute wiring lives in the node's args: map; fall back to plain
-      // data keys (minus the reserved ones) for attribute-bags without edges.
-      const src = n.data.args || n.data;
-      const keys = Object.keys(src || {}).filter((k) => k !== "type" && k !== "label");
-      return `
-        <div class="node__title">attributes</div>
-        ${keys.length ? `<div class="node__meta">${keys.map(esc).join(", ")}</div>` : ""}
-      `;
-    },
-    class: (n) => `
-      <div class="node__header">
-        <span class="node__title">${name(n)}</span>
-        ${n.data.loc ? `<span class="node__meta">${esc(n.data.loc)}</span>` : ""}
-      </div>
-      <div class="node__children"></div>
-    `,
-    // Compound container grouping functions/classes/nested groups.
-    group: (n) => `
-      <div class="node__header">
-        <span class="node__title">${name(n)}</span>
-        ${n.data.loc ? `<span class="node__meta">${esc(n.data.loc)}</span>` : ""}
-      </div>
-      <div class="node__children"></div>
-    `,
-  };
-
-  IOF.templates = templates;
-  // A node carrying `html` was rendered at build time from a Jinja
-  // `templates/<type>.html` file (see io_flow/jinja_templates.py); everything
-  // else falls through to the map above.
+  // A node with children still gets a mount even here: the engine appends a
+  // `.node__children` div when the rendered body provides none.
   IOF.renderNode = (node) =>
-    node.html != null ? node.html : (templates[node.type] || templates.node)(node);
+    node.html != null ? node.html : `<div class="node__title">${name(node)}</div>`;
 
-  /* ---- Sidebar templates — USER-EDITABLE ----------------------------------
+  /* ---- Sidebar ------------------------------------------------------------
    *
-   * Maps a node `type` to a function returning the sidebar's *detail* HTML
-   * (the engine owns the chrome: close button, type tag, title). Types with
-   * no entry fall back to a generic dump of every `data:` key, so new node
-   * types get a working sidebar with zero code.
+   * Per-type detail comes from a `sidebar:` declaration or a
+   * `templates/<type>.sidebar.html.j2` file, prerendered onto the node. This
+   * map is the JS escape hatch for anything that must be computed in the
+   * browser; types with neither get the generic dump below.
    */
   const row = (k, v) => `<dt>${esc(k)}</dt><dd>${v}</dd>`;
   const fmtMap = (obj) => {
@@ -130,13 +73,10 @@ window.IOFlow = window.IOFlow || {};
     return esc(v);
   };
 
-  const sidebars = {
-    attributes: (n) => `<dl>${row("attributes", fmtMap(n.data.args || n.data))}</dl>`,
-  };
+  const sidebars = {};
 
   IOF.sidebars = sidebars;
   IOF.renderSidebar = (node) => {
-    // Rendered at build time from `templates/<type>.sidebar.html`, if there is one.
     if (node.sidebar != null) return node.sidebar;
     const fn = sidebars[node.type];
     if (fn) return fn(node);
