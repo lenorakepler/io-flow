@@ -84,6 +84,43 @@ window.IOFlow = window.IOFlow || {};
   }
 
   // ---- Legend ----------------------------------------------------------------
+  // An edge legend row: a real stroke sample + label. Clickable to toggle every
+  // edge of that type (wired below). `data-edge-type` is the toggle key.
+  function edgeRow(type, label, off) {
+    return (
+      `<div class="legend__row legend__row--edge${off ? " legend__row--off" : ""}" role="listitem" tabindex="0"` +
+      ` data-edge-type="${IOF.esc(type)}" aria-pressed="${off ? "true" : "false"}"` +
+      ` title="Toggle ${IOF.esc(label || type)} edges">` +
+      `<svg class="legend__edge" width="42" height="12" aria-hidden="true">` +
+      `<path class="edge edge--${IOF.esc(type)}" d="M1,6 H34" marker-end="url(#arrow)"></path>` +
+      `</svg><span class="legend__text">${IOF.esc(label || type)}</span></div>`
+    );
+  }
+
+  // Clicking (or Enter/Space on) an edge row hides/shows that edge type.
+  function wireEdgeToggles(state, legend) {
+    const toggle = (row) => {
+      const type = row.getAttribute("data-edge-type");
+      if (!type) return;
+      const off = row.getAttribute("aria-pressed") !== "true"; // becoming hidden
+      row.setAttribute("aria-pressed", off ? "true" : "false");
+      row.classList.toggle("legend__row--off", off);
+      IOF.edges.setEdgeTypeHidden(state, type, off);
+    };
+    legend.addEventListener("click", (ev) => {
+      const row = ev.target.closest(".legend__row--edge");
+      if (row) toggle(row);
+    });
+    legend.addEventListener("keydown", (ev) => {
+      if (ev.key !== "Enter" && ev.key !== " ") return;
+      const row = ev.target.closest(".legend__row--edge");
+      if (row) {
+        ev.preventDefault();
+        toggle(row);
+      }
+    });
+  }
+
   function buildLegend(state, legend) {
     legend.setAttribute("role", "list");
     const declared = state.graph.legend;
@@ -97,20 +134,14 @@ window.IOFlow = window.IOFlow || {};
       (declared.nodes || []).forEach((n) => {
         rows.push(`<div class="legend__row" role="listitem">${n.html}</div>`);
       });
-      // An edge has no markup of its own, so draw the real thing: a stroke
-      // carrying `edge edge--<type>`, through the shared arrow marker.
-      (declared.edges || []).forEach((e) => {
-        rows.push(
-          `<div class="legend__row" role="listitem">` +
-            `<svg class="legend__edge" width="42" height="12" aria-hidden="true">` +
-            `<path class="edge edge--${IOF.esc(e.type)}" d="M1,6 H34" marker-end="url(#arrow)"></path>` +
-            `</svg><span class="legend__text">${IOF.esc(e.label)}</span></div>`
-        );
-      });
+      const off = state.hiddenEdgeTypes || new Set();
+      (declared.edges || []).forEach((e) => rows.push(edgeRow(e.type, e.label, off.has(e.type))));
       legend.innerHTML = rows.join("");
+      wireEdgeToggles(state, legend);
       return;
     }
-    // No `legend:` block: every type present, as a bare chip.
+    // No `legend:` block: node types as chips, then a clickable row per edge
+    // type present so whole edge sets can be toggled off.
     const types = [];
     const seen = new Set();
     state.graph.nodes.forEach((n) => {
@@ -119,13 +150,25 @@ window.IOFlow = window.IOFlow || {};
         types.push(n.type);
       }
     });
-    legend.setAttribute("aria-label", "Node types");
-    legend.innerHTML = types
-      .map(
-        (t) =>
-          `<div class="node node--${IOF.esc(t)}" role="listitem"><span class="node__title">${IOF.esc(t)}</span></div>`
-      )
-      .join("");
+    const edgeTypes = [];
+    const seenE = new Set();
+    (state.graph.edges || []).forEach((e) => {
+      const t = e.type || "edge";
+      if (!seenE.has(t)) {
+        seenE.add(t);
+        edgeTypes.push(t);
+      }
+    });
+    legend.setAttribute("aria-label", "Legend");
+    legend.innerHTML =
+      types
+        .map(
+          (t) =>
+            `<div class="node node--${IOF.esc(t)}" role="listitem"><span class="node__title">${IOF.esc(t)}</span></div>`
+        )
+        .join("") +
+      edgeTypes.map((t) => edgeRow(t, t, (state.hiddenEdgeTypes || new Set()).has(t))).join("");
+    wireEdgeToggles(state, legend);
   }
 
   IOF.ui = { init };

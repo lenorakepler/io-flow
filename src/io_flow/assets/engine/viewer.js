@@ -23,6 +23,10 @@ window.IOFlow = window.IOFlow || {};
       parentOf: {}, // id -> parent id | null
       pos: {}, // id -> {x, y, w, h} parent-relative (live; drag mutates this)
       edgeEls: [],
+      // Edge types hidden from the start (`diagram: hiddenEdges:`). They still
+      // exist in the graph, so click-to-dim still lights their endpoints --
+      // an invisible relation that only powers focus. Toggle in the legend.
+      hiddenEdgeTypes: new Set((graph.diagram || {}).hiddenEdges || []),
     };
     graph.nodes.forEach((n) => {
       state.parentOf[n.id] = n.parent == null ? null : n.parent;

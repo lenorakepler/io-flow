@@ -511,6 +511,21 @@ body {
 #legend .legend__text {
   font-size: 11px;
 }
+/* Edge rows are toggles: clickable, and dimmed + struck through when their
+   edge type is hidden (aria-pressed=true). */
+#legend .legend__row--edge {
+  cursor: pointer;
+  border-radius: 4px;
+}
+#legend .legend__row--edge:hover {
+  background: var(--surface-2, rgb(var(--shadow-rgb) / 0.06));
+}
+#legend .legend__row--off {
+  opacity: 0.4;
+}
+#legend .legend__row--off .legend__text {
+  text-decoration: line-through;
+}
 
 /* ---- Dim (M3) ------------------------------------------------------------- */
 .dimmed {

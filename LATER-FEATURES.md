@@ -5,6 +5,22 @@ stand, why, and what would come next.
 
 ## Done
 
+### Legend edge toggles + `diagram: hiddenEdges:`
+
+Legend edge rows are clickable: each toggles every edge of that type on/off
+(`IOF.edges.setEdgeTypeHidden`, applied through `applyGeometry` so it survives
+re-routes). `diagram: hiddenEdges: [type, ...]` starts those types hidden.
+
+Hidden edges still exist in the graph, so `dim.js` (adjacency built from
+`graph.edges`, not the DOM) still lights their endpoints on click — an invisible
+relation that exists only to power click-to-focus. Used for stage membership:
+`drives` edges are invisible, but clicking a stage lights every skill that drives
+it and dims the rest.
+
+- `edges.js` (`setEdgeTypeHidden`, hidden check in `applyGeometry`),
+  `ui.js` (clickable legend rows + auto edge-type rows), `viewer.js`
+  (`state.hiddenEdgeTypes` from `diagram.hiddenEdges`), `viewer.css` (row styling).
+
 ### `descriptors:` — data field → synthetic child node
 
 A top-level `descriptors:` block maps a data field name to a node type:

@@ -304,11 +304,15 @@ window.IOFlow = window.IOFlow || {};
 
   function applyGeometry(state, eps) {
     state.edgeGeom = eps; // latest resolved geometry (anchors.js reads it)
+    const off = state.hiddenEdgeTypes;
     state.edgeEls.forEach((rec, i) => {
       const ep = eps[i];
-      rec.el.style.display = ep.hidden ? "none" : "";
-      if (rec.label) rec.label.style.display = ep.hidden ? "none" : "";
-      if (ep.hidden) return;
+      // An edge is hidden if an endpoint is collapsed away OR its type is
+      // toggled off in the legend (setEdgeTypeHidden).
+      const hidden = ep.hidden || (off && off.has(rec.edge.type));
+      rec.el.style.display = hidden ? "none" : "";
+      if (rec.label) rec.label.style.display = hidden ? "none" : "";
+      if (hidden) return;
       const r = routeOf(ep);
       rec.el.setAttribute("d", r.d);
       if (rec.label) {
@@ -393,5 +397,14 @@ window.IOFlow = window.IOFlow || {};
     state.svg.setAttribute("height", maxY + 80);
   }
 
-  IOF.edges = { renderAll, updateFor, resize, isAncestor, sankeyUnit, facePoints };
+  // Show/hide every edge of a type (legend toggles). Reapplies the current
+  // geometry so it survives later re-routes.
+  function setEdgeTypeHidden(state, type, hidden) {
+    const off = state.hiddenEdgeTypes || (state.hiddenEdgeTypes = new Set());
+    if (hidden) off.add(type);
+    else off.delete(type);
+    if (state.edgeGeom) applyGeometry(state, state.edgeGeom);
+  }
+
+  IOF.edges = { renderAll, updateFor, resize, isAncestor, sankeyUnit, facePoints, setEdgeTypeHidden };
 })(window.IOFlow);
