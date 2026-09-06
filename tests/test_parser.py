@@ -729,6 +729,25 @@ def test_default_type_falls_back_to_node():
     assert _node(graph, "plain")["type"] == "node"
 
 
+def test_untyped_nodes_fall_back_to_what_they_structurally_are():
+    """Children -> `group`, none -> `node`; a `defaults:` entry still wins."""
+    graph = parse(
+        {
+            "nodes": {
+                "$holder": {"$leaf": {}},
+                "$listing": {"steps": ["one"]},
+                "$alone": {},
+            }
+        }
+    )
+    assert _node(graph, "holder")["type"] == "group"
+    assert _node(graph, "listing")["type"] == "group"
+    assert _node(graph, "alone")["type"] == "node"
+    assert _node(graph, "leaf")["type"] == "node"
+    typed = parse({"defaults": {"_root": "platform"}, "nodes": {"$h": {"$k": {}}}})
+    assert _node(typed, "h")["type"] == "platform"
+
+
 def test_defaults_block_types_children_by_parent_type():
     graph = parse(
         {

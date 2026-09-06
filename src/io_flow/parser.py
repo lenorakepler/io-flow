@@ -37,7 +37,8 @@ Rules:
 * **Types are free-form.** ``type:`` maps straight to a viewer template +
   ``.node--<type>`` CSS class; no registration anywhere. Untyped nodes get a
   type from the ``defaults:`` block (parent type -> child type, ``_root`` for
-  top-level nodes), falling back to ``"node"``.
+  top-level nodes), falling back to what the node structurally is: ``"group"``
+  when it holds children, ``"node"`` when it doesn't.
 * **References are self-marking.** Inside a relation block, whichever side of
   an entry wears the ``$`` is the reference; the parser never guesses from
   position. Unmarked strings are always literals -- free text can never spawn
@@ -324,12 +325,19 @@ def parse(data: dict[str, Any]) -> dict[str, Any]:
             )
         seen.add(node_id)
 
+        label = spec.get("label")
+        children = {k: v for k, v in spec.items() if str(k).startswith(SIGIL)}
+        # An untyped node falls back to what it structurally *is*: `group` when
+        # it holds children, `node` when it doesn't. It renders through
+        # group.html either way -- compound-ness is a state -- but carrying the
+        # type means `.node--group` styling applies too. A `defaults:` entry
+        # still wins, as does the `step` fallback inside a `steps:` list.
+        if fallback_type == DEFAULT_TYPE and (children or spec.get("steps")):
+            fallback_type = "group"
         node_type = (
             str(spec["type"]) if spec.get("type") is not None
             else default_type(parent_type, fallback_type)
         )
-        label = spec.get("label")
-        children = {k: v for k, v in spec.items() if str(k).startswith(SIGIL)}
         # `edges` is reserved inside a node: a locally-declared explicit-edge
         # list (an omitted from/to defaults to this node), not sidebar data.
         if "edges" in spec:

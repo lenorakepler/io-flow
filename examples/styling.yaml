@@ -214,3 +214,133 @@ nodes:
     code: |
       $plain:
         type: undeclared
+
+  # ---------------------------------------------------------------------------
+  # The packaged types. Everything below ships in io-flow's own types.yaml and
+  # needs no declaration -- `type: file` just works in any diagram. Each node's
+  # `code:` quotes the packaged declaration that draws it, so this group is the
+  # defaults, rendered. Name a type here (or in your own templates/types.yaml)
+  # to replace that entry; the rest keep working.
+  $packaged:
+    type: group
+    label: packaged types (no declaration needed)
+
+    $a_file:
+      type: file
+      cli: --config
+      value: config.yaml
+      code: |
+        file:
+          badge: file
+          meta:
+            - "{% if data.cli %}<code>{{ data.cli }}</code>{% endif %}"
+            - "{{ data.value }}"
+
+        $a_file:
+          type: file
+          cli: --config
+          value: config.yaml
+
+    $an_option:
+      type: option
+      cli: --verbose
+      code: |
+        option:
+          badge: option
+          meta:
+            - "{% if data.cli %}<code>{{ data.cli }}</code>{% endif %}"
+
+        $an_option:
+          type: option
+          cli: --verbose
+
+    $a_parameter:
+      type: parameter
+      value: 8
+      code: |
+        parameter:
+          badge: param
+          meta:
+            - "{% if data.value is defined %}= {{ data.value }}{% endif %}"
+
+        $a_parameter:
+          type: parameter
+          value: 8
+
+    $a_function:
+      type: function
+      loc: src/run.py
+      code: |
+        function:
+          title: "{{ label }}()"
+          meta:
+            - "{{ data.loc }}"
+
+        $a_function:
+          type: function
+          loc: src/run.py
+
+    # No `code:` on this one: `attributes` lists its data keys in the meta line
+    # and declares its own sidebar, so a `code:` field would show up as an
+    # attribute and never render as source. The declaration is:
+    #   attributes:
+    #     title: attributes
+    #     meta: ["{{ (data.args or data) | reject(...) | join(', ') }}"]
+    #     sidebar: "<dl>...</dl>"
+    $an_attributes:
+      type: attributes
+      args: {host: str, port: int}
+
+    # Containers. `class` and `steps` both extend `group`, which is why they
+    # carry its header bar and children mount on top of their own accent.
+    $a_class:
+      type: class
+      loc: src/config.py
+      code: |
+        class:
+          extends: group
+          meta:
+            - "{{ data.loc }}"
+
+        $a_class:
+          type: class
+          loc: src/config.py
+      $a_method:
+        type: method
+        label: a_method
+        code: |
+          method:
+            title: "{{ label }}()"
+
+          $a_method:
+            type: method
+
+    $a_group:
+      type: group
+      code: |
+        group: {}
+
+        $a_group:
+          type: group
+      $a_node:
+        type: node
+        code: |
+          node: {}
+
+          $a_node:
+            type: node
+
+    # `steps` and `step` are packaged too -- see $pipeline above, which is a
+    # `type: steps` node whose items land on `step`.
+    $more_steps:
+      type: steps
+      label: "steps / step (see $pipeline)"
+      steps:
+        - first
+        - second
+      code: |
+        steps:
+          extends: group
+
+        step:
+          badge: "{{ data.number }}"

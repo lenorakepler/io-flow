@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from io_flow import emit
+from io_flow import emit, jinja_templates
 from io_flow.parser import parse_file
 from io_flow.server import LayoutServer
 
@@ -173,8 +173,14 @@ def test_the_styling_example_still_demonstrates_what_it_claims(tmp_path):
     # steps: numbered by position, no id per step, class: works on one of them
     assert '<span class="node__badge">1</span>' in nodes["pipeline1"]["html"]
     assert 'class="node node--step flagged"' in nodes["pipeline1"]["html"]
-    # Each node's `code:` quotes the YAML that made it -- keep the copies honest.
-    source = {line.strip() for line in example.read_text(encoding="utf-8").splitlines()}
+    # Each node's `code:` quotes the YAML that made it -- its own declaration
+    # and, for the packaged types, io-flow's own types.yaml. Keep both honest.
+    packaged = Path(jinja_templates.BASES) / "types.yaml"
+    source = {
+        line.strip()
+        for path in (example, packaged)
+        for line in path.read_text(encoding="utf-8").splitlines()
+    }
     quoted = 0
     for node in nodes.values():
         for line in (node["data"].get("code") or "").splitlines():

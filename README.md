@@ -258,9 +258,12 @@ nodes:
   $a: {emits: {$log: "event"}}        # a -> log, labeled, class edge--emits
 ```
 
-**Default types.** Untyped nodes get `type: node`. The `defaults:` block maps
-a parent type to its children's default (`_root` covers top-level nodes), so
-terse declarations stay correct:
+**Default types.** An untyped node falls back to what it structurally is:
+`group` when it holds children, `node` when it doesn't. Compound-ness was
+already a state — a node with children renders through `group.html` regardless
+— and carrying the type means `.node--group` styling applies too. The
+`defaults:` block overrides that, mapping a parent type to its children's
+default (`_root` covers top-level nodes), so terse declarations stay correct:
 
 ```yaml
 defaults:
@@ -329,8 +332,10 @@ touching engine code:
   bare-title guard and the generic sidebar dump.
 
 [`examples/styling.yaml`](examples/styling.yaml) is this whole section as one
-diagram — every feature below drawn by a node that says which feature drew it.
-Build it and read the boxes beside the YAML:
+diagram — every feature below drawn by a node that says which feature drew it,
+plus one node per packaged type (`file`, `option`, `class`, `group`, …) so the
+defaults you inherit are visible too. Each node carries a `code:` field quoting
+the YAML that drew it, so clicking one shows source beside result:
 
 ```bash
 io-flow build examples/styling.yaml -o styling.html   # or `edit` to poke at it live
