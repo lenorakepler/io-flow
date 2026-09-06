@@ -1030,3 +1030,40 @@ def test_descriptors_id_collision_is_a_loud_error():
                 },
             }
         )
+
+
+def test_types_from_external_file(tmp_path):
+    (tmp_path / "types.yaml").write_text(
+        "box: {title: '[[ {{ label }} ]]', badge: b}\n", encoding="utf-8"
+    )
+    (tmp_path / "d.yaml").write_text(
+        "types: types.yaml\nnodes: {$a: {type: box}}\n", encoding="utf-8"
+    )
+    g = parse_file(tmp_path / "d.yaml")
+    assert g["types"]["box"]["badge"] == "b"
+    assert _node(g, "a")["type"] == "box"
+
+
+def test_types_from_list_of_files_and_inline_last_wins(tmp_path):
+    (tmp_path / "base.yaml").write_text("box: {badge: base}\n", encoding="utf-8")
+    (tmp_path / "d.yaml").write_text(
+        "types:\n  - base.yaml\n  - {box: {badge: override}}\n"
+        "nodes: {$a: {type: box}}\n",
+        encoding="utf-8",
+    )
+    g = parse_file(tmp_path / "d.yaml")
+    assert g["types"]["box"]["badge"] == "override"
+
+
+def test_types_inline_mapping_still_works(tmp_path):
+    (tmp_path / "d.yaml").write_text(
+        "types: {box: {badge: inline}}\nnodes: {$a: {type: box}}\n", encoding="utf-8"
+    )
+    g = parse_file(tmp_path / "d.yaml")
+    assert g["types"]["box"]["badge"] == "inline"
+
+
+def test_types_missing_file_is_an_error(tmp_path):
+    (tmp_path / "d.yaml").write_text("types: nope.yaml\nnodes: {$a: {}}\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="file not found"):
+        parse_file(tmp_path / "d.yaml")

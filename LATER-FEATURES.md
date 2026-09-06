@@ -5,6 +5,15 @@ stand, why, and what would come next.
 
 ## Done
 
+### `types:` from an external file
+
+`types:` accepts, besides the inline mapping, a **file path** to a YAML file of
+`{type: declaration}`, or a **list** mixing paths and inline mappings (merged in
+order, later wins). Paths resolve relative to the diagram YAML. Resolved in
+`parse_file` (`_load_types_value`) before `parse()`, so the rest of the pipeline
+is unchanged. This is separate from — and cleaner than — the pre-existing
+`style: templates:` dir convention (which loads a fixed `templates/types.yaml`).
+
 ### Legend edge toggles + `diagram: hiddenEdges:`
 
 Legend edge rows are clickable: each toggles every edge of that type on/off

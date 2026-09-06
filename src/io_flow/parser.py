@@ -205,12 +205,57 @@ def _edge_keys_for(data: dict[str, Any]) -> tuple[dict[str, str], dict[str, dict
     return keys, anchors
 
 
+def _load_types_value(value: Any, base_dir: Path) -> dict[str, Any]:
+    """Resolve a ``types:`` value into a single merged mapping.
+
+    Accepts the inline mapping (unchanged), a **file path** to a YAML file of
+    ``{type: declaration}``, or a **list** mixing paths and inline mappings --
+    merged in order, later entries winning (same rule as everywhere else).
+    Paths resolve relative to the YAML's directory; ``~`` expands; absolute
+    paths pass through.
+    """
+    yaml = YAML(typ="safe")
+    merged: dict[str, Any] = {}
+
+    def merge_one(item: Any) -> None:
+        if isinstance(item, str):
+            p = Path(item).expanduser()
+            p = p if p.is_absolute() else base_dir / p
+            if not p.exists():
+                raise ValueError(f"types: file not found: {p}")
+            loaded = yaml.load(p.read_text(encoding="utf-8")) or {}
+            if not isinstance(loaded, dict):
+                raise ValueError(f"{p}: must be a mapping of type name -> declaration")
+            merged.update({str(k): v for k, v in loaded.items()})
+        elif isinstance(item, dict):
+            merged.update({str(k): v for k, v in item.items()})
+        else:
+            raise ValueError(
+                "types: entries must be a mapping or a file path, got "
+                f"{type(item).__name__}"
+            )
+
+    if isinstance(value, list):
+        for item in value:
+            merge_one(item)
+    else:
+        merge_one(value)
+    return merged
+
+
 def parse_file(path: str | Path) -> dict[str, Any]:
     """Parse a YAML file at ``path`` into the graph model."""
     path = Path(path)
     yaml = YAML(typ="safe")
     with open(path, "r", encoding="utf-8") as fh:
         data = yaml.load(fh)
+    # `types:` may be an inline mapping (as always) or a path / list of paths to
+    # external YAML files, resolved relative to this file. Fold it to a mapping
+    # before parse() so the rest of the pipeline is unchanged.
+    if isinstance(data, dict) and data.get("types") is not None and not isinstance(
+        data["types"], dict
+    ):
+        data["types"] = _load_types_value(data["types"], path.parent)
     graph = parse(data or {})
     # Default the HTML title to the source filename; an explicit YAML
     # ``title:`` (set in parse()) takes precedence.
