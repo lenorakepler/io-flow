@@ -304,12 +304,16 @@ window.IOFlow = window.IOFlow || {};
 
   function applyGeometry(state, eps) {
     state.edgeGeom = eps; // latest resolved geometry (anchors.js reads it)
-    const off = state.hiddenEdgeTypes;
+    const offT = state.hiddenEdgeTypes;
+    const offG = state.hiddenEdgeGroups;
     state.edgeEls.forEach((rec, i) => {
       const ep = eps[i];
-      // An edge is hidden if an endpoint is collapsed away OR its type is
-      // toggled off in the legend (setEdgeTypeHidden).
-      const hidden = ep.hidden || (off && off.has(rec.edge.type));
+      // An edge is hidden if an endpoint is collapsed away, or its type or its
+      // group is toggled off in the legend.
+      const hidden =
+        ep.hidden ||
+        (offT && offT.has(rec.edge.type)) ||
+        (offG && offG.has(rec.edge.group));
       rec.el.style.display = hidden ? "none" : "";
       if (rec.label) rec.label.style.display = hidden ? "none" : "";
       // Skip geometry only when an endpoint is collapsed away (no route to
@@ -409,5 +413,13 @@ window.IOFlow = window.IOFlow || {};
     if (state.edgeGeom) applyGeometry(state, state.edgeGeom);
   }
 
-  IOF.edges = { renderAll, updateFor, resize, isAncestor, sankeyUnit, facePoints, setEdgeTypeHidden };
+  // Same, but by `group` (edges declared inside a node inherit it as group).
+  function setEdgeGroupHidden(state, group, hidden) {
+    const off = state.hiddenEdgeGroups || (state.hiddenEdgeGroups = new Set());
+    if (hidden) off.add(group);
+    else off.delete(group);
+    if (state.edgeGeom) applyGeometry(state, state.edgeGeom);
+  }
+
+  IOF.edges = { renderAll, updateFor, resize, isAncestor, sankeyUnit, facePoints, setEdgeTypeHidden, setEdgeGroupHidden };
 })(window.IOFlow);

@@ -1093,3 +1093,30 @@ def test_src_without_base_dir_is_plain_data():
     g = parse({"nodes": {"$a": {"src": "x.py"}}})
     assert "fileContents" not in g
     assert _node(g, "a")["data"]["src"] == "x.py"
+
+
+def test_node_declared_edge_inherits_node_as_group():
+    g = parse({"nodes": {"$a": {"edges": [{"to": "$b", "type": "x"}]}, "$b": {}}})
+    e = [e for e in g["edges"] if e.get("type") == "x"][0]
+    assert e["group"] == "a"
+
+
+def test_explicit_group_overrides_owner():
+    g = parse({"nodes": {"$a": {"edges": [{"to": "$b", "type": "x", "group": "G"}]}, "$b": {}}})
+    e = [e for e in g["edges"] if e.get("type") == "x"][0]
+    assert e["group"] == "G"
+
+
+def test_top_level_edge_has_no_group():
+    g = parse({"nodes": {"$a": {}, "$b": {}}, "edges": [{"from": "$a", "to": "$b"}]})
+    assert "group" not in g["edges"][0]
+
+
+def test_legend_groups_parsed():
+    g = parse({
+        "nodes": {"$a": {}},
+        "legend": {"groups": [{"group": "stage0", "label": "Stage 0"}, "stage1"]},
+    })
+    groups = g["legend"]["groups"]
+    assert groups[0] == {"group": "stage0", "label": "Stage 0"}
+    assert groups[1] == {"group": "stage1", "label": "stage1"}

@@ -27,6 +27,7 @@ window.IOFlow = window.IOFlow || {};
       // exist in the graph, so click-to-dim still lights their endpoints --
       // an invisible relation that only powers focus. Toggle in the legend.
       hiddenEdgeTypes: new Set((graph.diagram || {}).hiddenEdges || []),
+      hiddenEdgeGroups: new Set((graph.diagram || {}).hiddenEdgeGroups || []),
     };
     graph.nodes.forEach((n) => {
       state.parentOf[n.id] = n.parent == null ? null : n.parent;

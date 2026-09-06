@@ -285,8 +285,9 @@ def _strip(ref: str) -> str:
     return ref[len(SIGIL) :]
 
 
-def _legend_entries(block: Any, where: str) -> list[dict[str, Any]]:
-    """A legend's ``nodes:``/``edges:`` as [{type, label, ...}, ...].
+def _legend_entries(block: Any, where: str, key: str = "type") -> list[dict[str, Any]]:
+    """A legend's ``nodes:``/``edges:``/``groups:`` as [{<key>, label, ...}, ...].
+    ``key`` is ``type`` for nodes/edges and ``group`` for groups.
 
     Three spellings, because a legend is written in passing: a bare list of
     type names, a ``{type: caption}`` mapping, or full specs when an entry
@@ -295,7 +296,7 @@ def _legend_entries(block: Any, where: str) -> list[dict[str, Any]]:
     it stands for rather than needing a second column.
     """
     if isinstance(block, dict):
-        items: list[Any] = [{"type": k, "label": v} for k, v in block.items()]
+        items: list[Any] = [{key: k, "label": v} for k, v in block.items()]
     elif isinstance(block, list):
         items = list(block)
     else:
@@ -303,23 +304,23 @@ def _legend_entries(block: Any, where: str) -> list[dict[str, Any]]:
     out = []
     for item in items:
         if isinstance(item, str):
-            item = {"type": item}
-        # A one-key `{type: caption}` mapping inside the list -- the same
+            item = {key: item}
+        # A one-key `{<key>: caption}` mapping inside the list -- the same
         # spelling the mapping form uses, which is what you write when only
         # some entries need a caption.
         elif isinstance(item, dict) and len(item) == 1:
-            (key, value), = item.items()
-            if str(key) not in ("type", "label") and isinstance(value, str):
-                item = {"type": key, "label": value}
-        if not isinstance(item, dict) or item.get("type") is None:
+            (k, value), = item.items()
+            if str(k) not in (key, "label") and isinstance(value, str):
+                item = {key: k, "label": value}
+        if not isinstance(item, dict) or item.get(key) is None:
             raise ValueError(
-                f"legend.{where}: each entry needs a type -- a name, a "
-                f"{{type: caption}} pair, or a mapping with `type:` "
+                f"legend.{where}: each entry needs a {key} -- a name, a "
+                f"{{{key}: caption}} pair, or a mapping with `{key}:` "
                 f"(got {item!r})"
             )
         entry = {str(k): v for k, v in _plain(item).items()}
-        entry["type"] = str(entry["type"])
-        entry["label"] = str(entry.get("label") or entry["type"])
+        entry[key] = str(entry[key])
+        entry["label"] = str(entry.get("label") or entry[key])
         out.append(entry)
     return out
 
@@ -333,11 +334,11 @@ def _legend(block: Any) -> dict[str, Any]:
     """
     if not isinstance(block, dict):
         raise ValueError("legend: must be a mapping of title/nodes/edges")
-    unknown = set(map(str, block)) - {"title", "nodes", "edges"}
+    unknown = set(map(str, block)) - {"title", "nodes", "edges", "groups"}
     if unknown:
         raise ValueError(
             f"legend: unknown key(s) {', '.join(sorted(unknown))}; "
-            f"expected title, nodes, edges"
+            f"expected title, nodes, edges, groups"
         )
     out: dict[str, Any] = {}
     title = block.get("title")
@@ -346,6 +347,8 @@ def _legend(block: Any) -> dict[str, Any]:
     for where in ("nodes", "edges"):
         if block.get(where) is not None:
             out[where] = _legend_entries(block[where], where)
+    if block.get("groups") is not None:
+        out["groups"] = _legend_entries(block["groups"], "groups", key="group")
     return out
 
 
@@ -702,6 +705,15 @@ def parse(data: dict[str, Any], base_dir: Path | None = None) -> dict[str, Any]:
                     f"explicit edge {spec!r}: weight must be a number, got {weight!r}"
                 )
             edge["weight"] = weight
+        # `group:` is a free tag for toggling a whole set of edges together
+        # (e.g. by stage), independent of `type:`. An explicit group wins;
+        # otherwise an edge declared *inside* a node inherits that node as its
+        # group, so grouping falls out of where you write the edge. Viewer-only.
+        group = spec.get("group")
+        if group is not None:
+            edge["group"] = str(group)
+        elif owner is not None:
+            edge["group"] = owner
         # Endpoint pinning: an explicit anchor wins; otherwise a typed edge
         # inherits its relation's default anchor, so explicit `inherits`
         # entries render like derived ones.
@@ -718,6 +730,8 @@ def parse(data: dict[str, Any], base_dir: Path | None = None) -> dict[str, Any]:
     unique: list[dict[str, str]] = []
     seen_edges: set[tuple] = set()
     for edge in edges:
+        # `group` is a view tag, not identity: a node-level edge and an
+        # identical top-level one still dedupe (the first, keeping its group).
         key = (
             edge["source"],
             edge["target"],

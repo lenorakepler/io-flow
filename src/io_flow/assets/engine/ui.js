@@ -97,15 +97,30 @@ window.IOFlow = window.IOFlow || {};
     );
   }
 
-  // Clicking (or Enter/Space on) an edge row hides/shows that edge type.
+  // A group legend row: a plain swatch + label, toggling every edge in that
+  // group (edges inherit their declaring node as group). `data-edge-group`.
+  function groupRow(group, label, off) {
+    return (
+      `<div class="legend__row legend__row--edge legend__row--group${off ? " legend__row--off" : ""}" role="listitem" tabindex="0"` +
+      ` data-edge-group="${IOF.esc(group)}" aria-pressed="${off ? "true" : "false"}"` +
+      ` title="Toggle ${IOF.esc(label || group)} edges">` +
+      `<svg class="legend__edge" width="42" height="12" aria-hidden="true">` +
+      `<path class="edge" d="M1,6 H34" marker-end="url(#arrow)"></path>` +
+      `</svg><span class="legend__text">${IOF.esc(label || group)}</span></div>`
+    );
+  }
+
+  // Clicking (or Enter/Space on) an edge/group row hides/shows that set.
   function wireEdgeToggles(state, legend) {
     const toggle = (row) => {
-      const type = row.getAttribute("data-edge-type");
-      if (!type) return;
       const off = row.getAttribute("aria-pressed") !== "true"; // becoming hidden
+      const type = row.getAttribute("data-edge-type");
+      const group = row.getAttribute("data-edge-group");
+      if (!type && !group) return;
       row.setAttribute("aria-pressed", off ? "true" : "false");
       row.classList.toggle("legend__row--off", off);
-      IOF.edges.setEdgeTypeHidden(state, type, off);
+      if (group) IOF.edges.setEdgeGroupHidden(state, group, off);
+      else IOF.edges.setEdgeTypeHidden(state, type, off);
     };
     legend.addEventListener("click", (ev) => {
       const row = ev.target.closest(".legend__row--edge");
@@ -124,7 +139,10 @@ window.IOFlow = window.IOFlow || {};
   function buildLegend(state, legend) {
     legend.setAttribute("role", "list");
     const declared = state.graph.legend;
-    if (declared && ((declared.nodes || []).length || (declared.edges || []).length)) {
+    if (
+      declared &&
+      ((declared.nodes || []).length || (declared.edges || []).length || (declared.groups || []).length)
+    ) {
       legend.setAttribute("aria-label", declared.title || "Legend");
       const rows = [];
       if (declared.title) rows.push(`<div class="legend__title">${IOF.esc(declared.title)}</div>`);
@@ -136,6 +154,8 @@ window.IOFlow = window.IOFlow || {};
       });
       const off = state.hiddenEdgeTypes || new Set();
       (declared.edges || []).forEach((e) => rows.push(edgeRow(e.type, e.label, off.has(e.type))));
+      const offG = state.hiddenEdgeGroups || new Set();
+      (declared.groups || []).forEach((g) => rows.push(groupRow(g.group, g.label, offG.has(g.group))));
       legend.innerHTML = rows.join("");
       wireEdgeToggles(state, legend);
       return;

@@ -87,14 +87,15 @@ window.IOFlow = window.IOFlow || {};
     });
     // Reveal a focused node's edges even if their type is toggled off (so a
     // click shows just that node's I/O); keep other type-hidden edges hidden.
-    const off = state.hiddenEdgeTypes;
+    const offT = state.hiddenEdgeTypes;
+    const offG = state.hiddenEdgeGroups;
     state.edgeEls.forEach(({ el, edge, label }) => {
       const on = focus.has(edge.source) || focus.has(edge.target);
       el.classList.toggle("dimmed", !on);
       if (on) {
         el.style.display = "";
         if (label) label.style.display = "";
-      } else if (off && off.has(edge.type)) {
+      } else if ((offT && offT.has(edge.type)) || (offG && offG.has(edge.group))) {
         el.style.display = "none";
         if (label) label.style.display = "none";
       }
