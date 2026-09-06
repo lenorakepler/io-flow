@@ -16,9 +16,12 @@ events as the extension point (any skin can listen).
 
 - `parser.py` (`src:` embed, `parse(base_dir=...)`), `dim.js` (events),
   `assets/skins/filepanel.{js,css}`. Tests: `test_src_*`.
-- v1 shows plain monospace text. `lang` is exposed as `language-<lang>` on the
-  `<code>`. **Next:** render markdown to HTML; consider a small inlined syntax
-  highlighter for code (bundling one is heavy for a self-contained file).
+- Markdown (`lang == "markdown"`) is rendered to HTML by a small built-in
+  renderer (headings, lists, emphasis, links, inline + fenced code, blockquote,
+  hr); all source text is escaped first. Code/JSON/YAML show as plain monospace,
+  with `lang` exposed as `language-<lang>` on the `<code>`. **Next:** a small
+  inlined syntax highlighter for code (bundling one is heavy for a self-contained
+  file).
 - Note: embedding puts file text in the built HTML — do not `src:` secrets, and
   gitignore the built HTML if it embeds anything not meant to be committed.
 

@@ -38,17 +38,69 @@ body.has-filepanel #viewport {
 }
 #filepanel .fp__body {
   flex: 1;
-  margin: 0;
-  padding: 12px 14px;
   overflow: auto;
-  white-space: pre;
-  tab-size: 2;
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  line-height: 1.45;
+  padding: 12px 14px;
   color: var(--text, #1a1a1a);
 }
 #filepanel.fp--empty .fp__body {
   display: none;
+}
+/* Plain (code/json/yaml) view. */
+#filepanel .fp__pre {
+  margin: 0;
+  white-space: pre;
+  tab-size: 2;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  line-height: 1.45;
+}
+/* Rendered-markdown view. */
+#filepanel .fp__md {
+  font-size: 13px;
+  line-height: 1.5;
+}
+#filepanel .fp__md h1,
+#filepanel .fp__md h2,
+#filepanel .fp__md h3,
+#filepanel .fp__md h4 {
+  line-height: 1.25;
+  margin: 1em 0 0.4em;
+}
+#filepanel .fp__md h1 { font-size: 1.5em; }
+#filepanel .fp__md h2 { font-size: 1.3em; }
+#filepanel .fp__md h3 { font-size: 1.1em; }
+#filepanel .fp__md p { margin: 0.5em 0; }
+#filepanel .fp__md ul,
+#filepanel .fp__md ol { margin: 0.5em 0; padding-left: 1.4em; }
+#filepanel .fp__md li { margin: 0.15em 0; }
+#filepanel .fp__md a { color: var(--file, #2d597a); }
+#filepanel .fp__md code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.9em;
+  background: var(--surface-2, rgb(0 0 0 / 0.05));
+  padding: 0.1em 0.3em;
+  border-radius: 3px;
+}
+#filepanel .fp__md pre.fp__code {
+  background: var(--surface-2, rgb(0 0 0 / 0.05));
+  padding: 10px 12px;
+  border-radius: 6px;
+  overflow: auto;
+}
+#filepanel .fp__md pre.fp__code code {
+  background: none;
+  padding: 0;
+}
+#filepanel .fp__md blockquote {
+  margin: 0.5em 0;
+  padding-left: 0.8em;
+  border-left: 3px solid var(--line, #d9d9d9);
+  opacity: 0.85;
+}
+#filepanel .fp__md hr {
+  border: none;
+  border-top: 1px solid var(--line, #d9d9d9);
+  margin: 1em 0;
 }
 #filepanel.fp--empty .fp__name {
   font-weight: 400;
