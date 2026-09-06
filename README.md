@@ -92,6 +92,8 @@ Top-level keys:
 - **`diagram:`** — per-diagram layout config (below).
 - **`types:`** — node type declarations for this diagram: what a `type:`
   looks like when rendered (below).
+- **`legend:`** — which types are worth explaining, drawn by the real
+  templates (below).
 - **`layout:`** — machine-owned block written by Save; don't edit by hand.
 
 Inside a node's mapping:
@@ -315,6 +317,26 @@ on an item changes only what renders, never the id.
 The trade is the obvious one: **reordering the list renumbers everything after
 it**, so references and saved layout positions follow position, not content.
 Name the ones you point at (`$name:` children) if that matters more than terseness.
+
+**Legend.** Without a `legend:` block the viewer lists every type present as a
+bare chip. Declaring one says which types are worth explaining and what to call
+them — and each sample is *rendered by that type's own template*, so it carries
+the same badge, meta line and CSS a real node does:
+
+```yaml
+legend:
+  title: what things are            # optional
+  nodes:
+    - file                          # bare name: caption is the type
+    - dir: a project directory      # type: caption
+    - {type: option, label: a flag, cli: --verbose}   # full spec, meta and all
+  edges:
+    calls: who calls whom           # drawn as a real .edge--calls stroke
+```
+
+`nodes:`/`edges:` each take a list or a mapping, and a list entry may be any of
+the three spellings. A type that appears only in the legend still ships its
+`css:`, so the sample can't quietly render unstyled.
 
 **Layout config.** `diagram:` merges over the ELK defaults:
 
@@ -694,7 +716,8 @@ collapse, ui) and rarely needs editing.
 - **Collapse/expand** groups and classes via the header toggle; edges to hidden
   children re-anchor to the container.
 - **Filter box** (top-left): dims non-matches; Enter selects and centers the
-  first match; Escape clears. A **legend** shows each node type present.
+  first match; Escape clears. A **legend** shows each node type present, or
+  whatever a `legend:` block declares, rendered by the real templates.
 - **Connect** (edit mode): toggle the Connect button, click a source node,
   then a target node — the edge appears immediately, with optional type/label
   from the small form (type suggestions come from the edges already present;

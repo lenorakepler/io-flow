@@ -7,6 +7,20 @@
 
 title: Styling a diagram from its YAML
 
+# A legend, rendered by the real templates: each sample is a node of that type,
+# so it carries the same badge, meta and CSS the canvas does. Three spellings --
+# a bare name, `type: caption`, or a full spec when the sample needs data.
+legend:
+  title: what things are
+  nodes:
+    - {type: stage, label: a stage, note: with a meta line}
+    - urgent: needs attention
+    - chip: a rounded one
+    - {type: file, label: a file, cli: --config}
+    - group: a container
+  edges:
+    - next: step follows step
+
 types:
   # A declaration is Jinja per slot. `title`/`badge`/`meta` fill values; the
   # packaged node.html.j2 draws the markup around them. A meta line that

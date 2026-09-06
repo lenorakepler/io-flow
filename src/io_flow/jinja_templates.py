@@ -404,5 +404,32 @@ def prerender(
         elif default_sidebar is not None:
             extra["sidebar"] = render(default_sidebar.name, node)
         nodes.append({**node, **extra} if extra else node)
-    css = type_css(types, {n["type"] for n in graph["nodes"]})
-    return {**graph, "nodes": nodes}, css
+
+    # A declared `legend:` renders its node samples through the very same
+    # pipeline, so a sample is the real thing rather than a drawing of it: same
+    # template, same classes, same badges and meta. The viewer drops the markup
+    # into the HUD (engine/ui.js) and viewer.css undoes only the positioning.
+    out = {**graph, "nodes": nodes}
+    legend = graph.get("legend") or {}
+    legend_types: set[str] = {str(e["type"]) for e in legend.get("edges") or []}
+    if legend.get("nodes"):
+        samples = []
+        for i, entry in enumerate(legend["nodes"]):
+            data = {k: v for k, v in entry.items() if k not in ("type", "label")}
+            sample = {
+                # Not a graph node: never laid out, never referenced. The id
+                # only fills the wrapper's data-node-id.
+                "id": f"legend-{i}",
+                "type": entry["type"],
+                "parent": None,
+                "label": entry["label"],
+                "data": data,
+            }
+            spec, classes = resolve_type(sample["type"], types)
+            samples.append({**entry, "html": from_declaration(spec, sample, classes)})
+            legend_types.add(sample["type"])
+        out["legend"] = {**legend, "nodes": samples}
+    # A type explained in the legend may not appear in the graph at all; its
+    # `css:` still has to ship, or the sample renders unstyled.
+    css = type_css(types, {n["type"] for n in graph["nodes"]} | legend_types)
+    return out, css

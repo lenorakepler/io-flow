@@ -85,6 +85,32 @@ window.IOFlow = window.IOFlow || {};
 
   // ---- Legend ----------------------------------------------------------------
   function buildLegend(state, legend) {
+    legend.setAttribute("role", "list");
+    const declared = state.graph.legend;
+    if (declared && ((declared.nodes || []).length || (declared.edges || []).length)) {
+      legend.setAttribute("aria-label", declared.title || "Legend");
+      const rows = [];
+      if (declared.title) rows.push(`<div class="legend__title">${IOF.esc(declared.title)}</div>`);
+      // Node samples arrive prerendered (jinja_templates.prerender) -- the same
+      // markup a real node of that type gets, so they follow every type
+      // declaration and CSS rule automatically.
+      (declared.nodes || []).forEach((n) => {
+        rows.push(`<div class="legend__row" role="listitem">${n.html}</div>`);
+      });
+      // An edge has no markup of its own, so draw the real thing: a stroke
+      // carrying `edge edge--<type>`, through the shared arrow marker.
+      (declared.edges || []).forEach((e) => {
+        rows.push(
+          `<div class="legend__row" role="listitem">` +
+            `<svg class="legend__edge" width="42" height="12" aria-hidden="true">` +
+            `<path class="edge edge--${IOF.esc(e.type)}" d="M1,6 H34" marker-end="url(#arrow)"></path>` +
+            `</svg><span class="legend__text">${IOF.esc(e.label)}</span></div>`
+        );
+      });
+      legend.innerHTML = rows.join("");
+      return;
+    }
+    // No `legend:` block: every type present, as a bare chip.
     const types = [];
     const seen = new Set();
     state.graph.nodes.forEach((n) => {
@@ -93,7 +119,6 @@ window.IOFlow = window.IOFlow || {};
         types.push(n.type);
       }
     });
-    legend.setAttribute("role", "list");
     legend.setAttribute("aria-label", "Node types");
     legend.innerHTML = types
       .map(

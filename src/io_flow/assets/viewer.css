@@ -454,6 +454,48 @@ body {
   font-size: 11px;
 }
 
+/* A declared `legend:` block renders real node markup (see engine/ui.js), so
+ * the samples carry whatever the type does -- badges, meta, group chrome. Undo
+ * the parts that only make sense on the canvas: the absolute header overlay,
+ * the children mount, and the fixed compound height. */
+#legend .legend__title {
+  color: var(--muted);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+#legend .legend__row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+/* Keeps the header's own background: on a group-ish type that bar *is* the
+   look, so a sample without it stops looking like the thing it stands for. */
+#legend .node > .node__header {
+  position: static;
+  height: auto;
+  border-bottom: none;
+  border-radius: 6px;
+  padding: 2px 8px;
+}
+#legend .node__children {
+  display: none;
+}
+#legend .legend__edge {
+  flex: none;
+  overflow: visible;
+}
+/* The stroke rules live under #edges, so a sample outside that svg needs them
+   restated; the per-type ones (.edge--calls and friends) are global already. */
+#legend .legend__edge .edge {
+  fill: none;
+  stroke: var(--edge);
+  stroke-width: 1.6;
+}
+#legend .legend__text {
+  font-size: 11px;
+}
+
 /* ---- Dim (M3) ------------------------------------------------------------- */
 .dimmed {
   opacity: 0.12;

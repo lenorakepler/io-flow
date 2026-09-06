@@ -240,6 +240,70 @@ def _strip(ref: str) -> str:
     return ref[len(SIGIL) :]
 
 
+def _legend_entries(block: Any, where: str) -> list[dict[str, Any]]:
+    """A legend's ``nodes:``/``edges:`` as [{type, label, ...}, ...].
+
+    Three spellings, because a legend is written in passing: a bare list of
+    type names, a ``{type: caption}`` mapping, or full specs when an entry
+    needs data of its own (a ``file`` whose ``cli:`` shows in its meta line).
+    The caption becomes the entry's label, so the sample reads like the thing
+    it stands for rather than needing a second column.
+    """
+    if isinstance(block, dict):
+        items: list[Any] = [{"type": k, "label": v} for k, v in block.items()]
+    elif isinstance(block, list):
+        items = list(block)
+    else:
+        raise ValueError(f"legend.{where}: must be a list or a mapping, got {block!r}")
+    out = []
+    for item in items:
+        if isinstance(item, str):
+            item = {"type": item}
+        # A one-key `{type: caption}` mapping inside the list -- the same
+        # spelling the mapping form uses, which is what you write when only
+        # some entries need a caption.
+        elif isinstance(item, dict) and len(item) == 1:
+            (key, value), = item.items()
+            if str(key) not in ("type", "label") and isinstance(value, str):
+                item = {"type": key, "label": value}
+        if not isinstance(item, dict) or item.get("type") is None:
+            raise ValueError(
+                f"legend.{where}: each entry needs a type -- a name, a "
+                f"{{type: caption}} pair, or a mapping with `type:` "
+                f"(got {item!r})"
+            )
+        entry = {str(k): v for k, v in _plain(item).items()}
+        entry["type"] = str(entry["type"])
+        entry["label"] = str(entry.get("label") or entry["type"])
+        out.append(entry)
+    return out
+
+
+def _legend(block: Any) -> dict[str, Any]:
+    """The ``legend:`` block: samples rendered by the real templates.
+
+    Declaring one replaces the viewer's automatic type legend, which lists
+    every type present as a bare chip -- this one says which types are worth
+    explaining, and what to call them.
+    """
+    if not isinstance(block, dict):
+        raise ValueError("legend: must be a mapping of title/nodes/edges")
+    unknown = set(map(str, block)) - {"title", "nodes", "edges"}
+    if unknown:
+        raise ValueError(
+            f"legend: unknown key(s) {', '.join(sorted(unknown))}; "
+            f"expected title, nodes, edges"
+        )
+    out: dict[str, Any] = {}
+    title = block.get("title")
+    if isinstance(title, str) and title.strip():
+        out["title"] = title.strip()
+    for where in ("nodes", "edges"):
+        if block.get(where) is not None:
+            out[where] = _legend_entries(block[where], where)
+    return out
+
+
 def parse(data: dict[str, Any]) -> dict[str, Any]:
     """Parse an already-loaded YAML mapping into the graph model."""
     nodes: list[dict[str, Any]] = []
@@ -602,6 +666,10 @@ def parse(data: dict[str, Any]) -> dict[str, Any]:
                 f"(extends/title/badge/meta/template/sidebar)"
             )
         graph["types"] = {str(k): _plain(v) for k, v in types.items()}
+
+    legend = data.get("legend")
+    if legend is not None:
+        graph["legend"] = _legend(legend)
 
     style = data.get("style")
     if style is not None:

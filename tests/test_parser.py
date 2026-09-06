@@ -902,6 +902,40 @@ def test_autoedges_without_steps_is_an_error():
         parse({"nodes": {"$s": {"autoedges": True}}})
 
 
+def test_legend_accepts_every_spelling():
+    graph = parse(
+        {
+            "legend": {
+                "title": "what things are",
+                "nodes": [
+                    "file",                                    # bare name
+                    {"dir": "a directory"},                    # one-key caption
+                    {"type": "option", "label": "a flag", "cli": "--v"},  # full spec
+                ],
+                "edges": {"calls": "who calls whom"},          # mapping form
+            },
+            "nodes": {"$a": {}},
+        }
+    )
+    assert graph["legend"]["title"] == "what things are"
+    assert [(e["type"], e["label"]) for e in graph["legend"]["nodes"]] == [
+        ("file", "file"),          # caption defaults to the type name
+        ("dir", "a directory"),
+        ("option", "a flag"),
+    ]
+    assert graph["legend"]["nodes"][2]["cli"] == "--v"  # data reaches the sample
+    assert graph["legend"]["edges"] == [{"type": "calls", "label": "who calls whom"}]
+
+
+def test_legend_rejects_typos_and_entries_without_a_type():
+    with pytest.raises(ValueError, match="unknown key"):
+        parse({"legend": {"noeds": ["file"]}, "nodes": {"$a": {}}})
+    with pytest.raises(ValueError, match="each entry needs a type"):
+        parse({"legend": {"nodes": [{"label": "no type here"}]}, "nodes": {"$a": {}}})
+    with pytest.raises(ValueError, match="must be a list or a mapping"):
+        parse({"legend": {"nodes": "file"}, "nodes": {"$a": {}}})
+
+
 def test_style_block_parsed_and_validated():
     graph = parse({"style": {"skin": "codemap"}, "nodes": {"$a": {}}})
     assert graph["style"] == {"skin": ["codemap"]}

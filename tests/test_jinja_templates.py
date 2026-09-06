@@ -189,6 +189,30 @@ def test_the_styling_example_still_demonstrates_what_it_claims(tmp_path):
     assert quoted > 40  # and that they didn't quietly disappear
 
 
+def test_legend_samples_are_rendered_like_real_nodes(tmp_path):
+    """A sample is the thing itself: same template, classes, badge, meta."""
+    src = tmp_path / "d.yaml"
+    src.write_text(
+        "types:\n"
+        "  queue: {badge: queue, meta: ['{{ data.depth }} waiting'], css: 'color: red;'}\n"
+        "legend:\n"
+        "  nodes: [{type: queue, label: a queue, depth: 3}]\n"
+        "  edges: {calls: who calls whom}\n"
+        "nodes: {$other: {type: node}}\n",  # no queue node in the graph at all
+        encoding="utf-8",
+    )
+    html = emit.build_html(parse_file(src))
+    legend = json.loads(html.split('id="graph-data"', 1)[1].split(">", 1)[1]
+                        .split("</script>", 1)[0])["legend"]
+    sample = legend["nodes"][0]["html"]
+    assert 'class="node node--queue"' in sample
+    assert '<span class="node__badge">queue</span>' in sample
+    assert '<div class="node__meta">3 waiting</div>' in sample
+    assert legend["edges"] == [{"type": "calls", "label": "who calls whom"}]
+    # A type only the legend mentions still ships its css, or the sample lies.
+    assert ".node--queue { color: red; }" in _styles(html)
+
+
 def test_childtype_in_a_project_types_file_warns(tmp_path):
     """The parser has already assigned types by the time this file is read."""
     d = tmp_path / "templates"
