@@ -54,6 +54,21 @@ window.IOFlow = window.IOFlow || {};
     return { "elk.padding": `[top=${IOF.headerH() + 8},left=16,bottom=16,right=16]` };
   }
 
+  // What a compound's header bar needs to show its title. A compound is sized
+  // by its children -- ELK from their extent + padding, restore from the same
+  // -- and neither knows the header text, so a long title spills out of the
+  // bar. The header is an absolute overlay stretched to the node's width, so
+  // its scrollWidth is the content it would need. 0 for leaves, whose measured
+  // box already includes the header in normal flow.
+  function headerWidth(el) {
+    const head = el && el.querySelector(":scope > .node__header");
+    // Only the overlay kind: a header in normal flow (leaf, or an empty
+    // compound sized like one) is already inside the measured box.
+    if (!head || getComputedStyle(head).position !== "absolute") return 0;
+    return Math.ceil(head.scrollWidth) + 12; // + the bar's own side padding
+  }
+  IOF.headerWidth = headerWidth;
+
   function buildForest(graph) {
     const byId = {};
     graph.nodes.forEach((n) => {
@@ -172,6 +187,13 @@ window.IOFlow = window.IOFlow || {};
     const out = { id: node.id };
     if (children.length && !(stackRoots && stackRoots.has(node.id))) {
       out.layoutOptions = compoundOptions();
+      // Lay out around a header-wide parent rather than widening it after the
+      // fact, so siblings keep their spacing instead of being overlapped.
+      const hw = headerWidth(domIndex[node.id]);
+      if (hw) {
+        out.layoutOptions["elk.nodeSize.constraints"] = "MINIMUM_SIZE";
+        out.layoutOptions["elk.nodeSize.minimum"] = `(${hw},0)`;
+      }
       out.children = children.map((c) => toElk(c, domIndex, hints, stackRoots));
     } else {
       // Leaves -- and stacked compounds, whose inline size planStacks set.

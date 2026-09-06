@@ -233,6 +233,9 @@ body {
   padding: 0;
   cursor: pointer;
 }
+/* Direct-child, not descendant: a node nested *inside* a group has a header of
+   its own, and it must stay in normal flow or the node measures ~0 and lays
+   out as a 22px stub. Same for the children mount below, and for .node--class. */
 .node--group > .node__header {
   position: absolute;
   top: 0;
@@ -291,7 +294,7 @@ body {
   border-radius: 4px;
   box-shadow: none;
 }
-.node--stacked > .node__children > .node:hover {
+.node--stacked .node__children .node:hover {
   box-shadow: 0 1px 4px rgba(16, 24, 40, 0.14);
 }
 
@@ -385,7 +388,7 @@ body {
   opacity: 0;
   transition: opacity 0.12s ease;
 }
-.node:hover > .node__resize::after {
+.node:hover .node__resize::after {
   opacity: 1;
 }
 .node--collapsed .node__resize {

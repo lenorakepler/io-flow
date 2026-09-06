@@ -118,6 +118,12 @@ window.IOFlow = window.IOFlow || {};
       if (mod && typeof mod.init === "function") mod.init(state);
     });
 
+    // collapse.js puts a toggle in every compound header, so a header needs
+    // more room now than it did at layout time. Re-floor (applyPositions
+    // measures it again) and re-anchor the edges to the widths that produces.
+    applyPositions(state, laid);
+    IOF.edges.renderAll(state);
+
     document.body.classList.add("ready");
   }
 
@@ -126,6 +132,10 @@ window.IOFlow = window.IOFlow || {};
       const p = laid[n.id];
       const el = state.nodeEls[n.id];
       if (!p) return;
+      // Floor every compound at its header width. ELK is asked for the same
+      // minimum (layout.js toElk), but the restore path has no layout engine
+      // to ask, and a saved width predates whatever the title says now.
+      if (IOF.headerWidth) p.w = Math.max(p.w, IOF.headerWidth(el));
       state.pos[n.id] = { x: p.x, y: p.y, w: p.w, h: p.h };
       el.style.left = p.x + "px";
       el.style.top = p.y + "px";
