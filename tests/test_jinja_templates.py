@@ -101,6 +101,56 @@ def test_declared_sidebar_string_beats_the_skins_default(tmp_path):
     assert nodes["other"]["sidebar"] == "GENERIC"
 
 
+def test_blocks_replace_a_base_block_from_yaml(tmp_path):
+    """`blocks:` reaches the slots the title/badge/meta sugar doesn't cover, so
+    a one-line type never needs a one-line file."""
+    src = tmp_path / "d.yaml"
+    src.write_text(
+        "types:\n"
+        "  queue:\n"
+        "    badge: queue\n"
+        "    blocks: {meta: '<div class=\"node__meta\">{{ data.depth }}!</div>'}\n"
+        "  panel:\n"
+        "    extends: _group\n"
+        "    blocks: {children: '<div class=\"node__children\" data-panel></div>'}\n"
+        "nodes:\n"
+        "  $inbox: {type: queue, depth: 12}\n"
+        "  $p: {type: panel}\n",
+        encoding="utf-8",
+    )
+    nodes = _embedded(emit.build_html(parse_file(src)))
+    # The block replaced meta; the badge sugar still came through.
+    assert '<div class="node__meta">12!</div>' in nodes["inbox"]["html"]
+    assert '<span class="node__badge">queue</span>' in nodes["inbox"]["html"]
+    # And a block the sugar has no field for at all.
+    assert 'data-panel' in nodes["p"]["html"]
+
+
+def test_blocks_can_append_with_super(tmp_path):
+    src = tmp_path / "d.yaml"
+    src.write_text(
+        "types:\n"
+        "  queue:\n"
+        "    meta: ['{{ data.depth }} waiting']\n"
+        "    blocks: {meta: '{{ super() }}<div class=\"node__meta\">and more</div>'}\n"
+        "nodes: {$inbox: {type: queue, depth: 12}}\n",
+        encoding="utf-8",
+    )
+    html = _embedded(emit.build_html(parse_file(src)))["inbox"]["html"]
+    assert html.index("12 waiting") < html.index("and more")
+
+
+def test_bad_block_name_is_a_loud_error(tmp_path):
+    src = tmp_path / "d.yaml"
+    src.write_text(
+        "types: {queue: {blocks: {'meta %}{{ 1/0 }}{%': 'x'}}}\n"
+        "nodes: {$inbox: {type: queue}}\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match="not a block name"):
+        emit.build_html(parse_file(src))
+
+
 def test_type_template_wins_and_undeclared_types_get_a_base(tmp_path):
     d = tmp_path / "templates"
     d.mkdir()
@@ -109,8 +159,10 @@ def test_type_template_wins_and_undeclared_types_get_a_base(tmp_path):
     )
     nodes = _embedded(emit.build_html(_graph("queue", "widget"), templates=d))
     assert nodes["queue"]["html"] == '<div class="node__title">queue (queue.py)</div>'
-    # `widget` is neither declared nor templated: it still renders, via _simple.
-    assert nodes["widget"]["html"] == '<div class="node__title">widget</div>'
+    # `widget` is neither declared nor templated: it still renders, via _node.
+    assert nodes["widget"]["html"] == (
+        '<div class="node__header"><div class="node__title">widget</div></div>'
+    )
 
 
 def test_undeclared_type_gets_compound_when_it_has_children():
@@ -131,7 +183,7 @@ def test_inherited_template_takes_names_from_the_nodes_own_type(tmp_path):
     d.mkdir()
     for t in ("queue", "job"):
         (d / f"{t}.html").write_text(
-            '{% extends "_simple.html" %}'
+            '{% extends "_node.html" %}'
             '{% block badge %} <span class="node__badge">{{ type }}</span>{% endblock %}',
             encoding="utf-8",
         )
@@ -140,7 +192,7 @@ def test_inherited_template_takes_names_from_the_nodes_own_type(tmp_path):
     assert '<span class="node__badge">job</span>' in nodes["job"]["html"]
     # A block override reaches into the shared base without restating it.
     (d / "job.html").write_text(
-        '{% extends "_simple.html" %}{% block meta %}<div class="node__meta">x</div>'
+        '{% extends "_node.html" %}{% block meta %}<div class="node__meta">x</div>'
         "{% endblock %}",
         encoding="utf-8",
     )
@@ -158,7 +210,7 @@ def test_file_template_inherits_its_declarations_slots(tmp_path):
         encoding="utf-8",
     )
     (d / "queue.html.j2").write_text(
-        '{% extends "_simple.html" %}'
+        '{% extends "_node.html" %}'
         '{% block meta %}<div class="node__meta">deep</div>{% endblock %}',
         encoding="utf-8",
     )
@@ -174,7 +226,7 @@ def test_file_template_inherits_its_declarations_slots(tmp_path):
 def test_compound_base_keeps_the_load_bearing_mounts(tmp_path):
     d = tmp_path / "templates"
     d.mkdir()
-    (d / "group.html").write_text('{% extends "_compound.html" %}', encoding="utf-8")
+    (d / "group.html").write_text('{% extends "_group.html" %}', encoding="utf-8")
     nodes = _embedded(emit.build_html(_graph("group"), templates=d))
     html = nodes["group"]["html"]
     assert 'class="node__header"' in html and 'class="node__children"' in html
@@ -188,7 +240,9 @@ def test_sidebar_template_is_independent_of_the_body_template(tmp_path):
     nodes = _embedded(emit.build_html(_graph("queue", "function"), templates=d))
     # Sidebar without a body template: the body still comes from the base.
     assert nodes["queue"]["sidebar"] == "<dl><dt>at</dt><dd>queue.py</dd></dl>"
-    assert nodes["queue"]["html"] == '<div class="node__title">queue</div>'
+    assert nodes["queue"]["html"] == (
+        '<div class="node__header"><div class="node__title">queue</div></div>'
+    )
     assert "sidebar" not in nodes["function"]
 
 
@@ -208,11 +262,11 @@ def test_sidebar_base_dumps_data_and_takes_block_overrides(tmp_path):
 def test_html_j2_suffix_works_everywhere(tmp_path):
     """`.html.j2` is the spelling editors highlight as Jinja; it must be
     interchangeable with `.html` for node, sidebar and skin templates -- and
-    `{% extends "_simple.html" %}` must still find the packaged base."""
+    `{% extends "_node.html" %}` must still find the packaged base."""
     d = tmp_path / "templates"
     d.mkdir()
     (d / "queue.html.j2").write_text(
-        '{% extends "_simple.html" %}'
+        '{% extends "_node.html" %}'
         '{% block badge %} <span class="node__badge">{{ type }}</span>{% endblock %}',
         encoding="utf-8",
     )

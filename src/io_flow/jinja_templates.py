@@ -14,8 +14,8 @@ hands it straight to the engine. Nothing re-renders a node in the browser
 time costs nothing and keeps the artifact free of template machinery.
 
 Declaring is never required: a type with neither a declaration nor a file
-renders the base its children call for -- ``_compound`` when something is
-parented to the node, ``_simple`` otherwise -- since compound-ness is a state,
+renders the base its children call for -- ``_group`` when something is
+parented to the node, ``_node`` otherwise -- since compound-ness is a state,
 not a type. An ``extends:`` in the declaration overrides that inference.
 ``<type>.sidebar.html`` -- or a declaration's ``sidebar:`` string -- does the
 same for the detail panel, independently: a type may have a body, a sidebar,
@@ -29,9 +29,9 @@ Reuse is a base plus slots::
 or, for a file, Jinja inheritance::
 
     {# templates/queue.html.j2 #}
-    {% extends "_simple.html" %}
+    {% extends "_node.html" %}
 
-``assets/templates/`` ships ``_simple.html``, ``_compound.html`` and
+``assets/templates/`` ships ``_node.html``, ``_group.html`` and
 ``_sidebar.html`` as bases; templates in the user's own directory shadow them by
 name. Every type-derived name comes from the *node's own* type, never from the
 template it inherited:
@@ -66,7 +66,7 @@ TEMPLATE_SUFFIXES = (".html", ".html.j2")
 class _Loader(FileSystemLoader):
     """FileSystemLoader that treats ``x.html`` and ``x.html.j2`` as one name.
 
-    So ``{% extends "_simple.html" %}`` finds ``_simple.html.j2`` -- the
+    So ``{% extends "_node.html" %}`` finds ``_node.html.j2`` -- the
     inheritance line stays the same whichever suffix the file on disk wears.
     """
 
@@ -207,10 +207,30 @@ def prerender(
         """Render a type's declaration: an inline body, or a base plus slots."""
         if spec.get("template"):
             return render_source(spec["template"], node, "template")
-        base = spec.get("extends") or (
-            "_compound" if node["id"] in parents else "_simple"
+        base = spec.get("extends") or ("_group" if node["id"] in parents else "_node")
+        slots = slots_for(spec, node)
+        blocks = spec.get("blocks") or {}
+        if not blocks:
+            return render(f"{base}.html", node, **slots)
+        # `blocks:` replaces a base's block outright, from YAML -- reaching the
+        # slots the sugar doesn't cover (`children`, `_sidebar`'s `rows`) and
+        # letting `{{ super() }}` append to the default. Same thing a template
+        # file does with {% extends %}, so build exactly that and render it.
+        for name in blocks:
+            if not str(name).replace("_", "").isalnum():
+                raise ValueError(
+                    f"types.yaml {node['type']}.blocks: {name!r} is not a block name"
+                )
+        source = f'{{% extends "{base}.html" %}}' + "".join(
+            f"{{% block {name} %}}{body}{{% endblock %}}" for name, body in blocks.items()
         )
-        return render(f"{base}.html", node, **slots_for(spec, node))
+        try:
+            return env.from_string(source).render(context(node), **slots)
+        except TemplateError as exc:
+            raise ValueError(
+                f"types.yaml {node['type']}.blocks: {exc.__class__.__name__}: {exc} "
+                f"(rendering node ${node['id']})"
+            ) from exc
 
     nodes = []
     for node in graph["nodes"]:
@@ -219,7 +239,7 @@ def prerender(
         # skin's default sidebar template. Every layer is optional; whatever is
         # missing falls through to the packaged templates.js.
         spec = types.get(node["type"]) or {}
-        extra = {}
+        extra: dict[str, Any] = {}
         if node["type"] in have:
             extra["html"] = render(have[node["type"]], node, **slots_for(spec, node))
         else:

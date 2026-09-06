@@ -9,11 +9,12 @@
 # `type`, `data`, `parent`. Markup in the field is markup; `{{ values }}` are
 # escaped.
 #
-#   extends:  base template to render (default: _simple; _compound holds children)
+#   extends:  base to render (default: _node; _group also mounts children)
 #   title:    the node's name line              (default: "{{ label }}")
 #   badge:    the pill beside the title         (omit for no badge)
 #   meta:     dimmer lines under the title; a line rendering blank is dropped,
 #             which is how "show `cli` only if there is one" works
+#   blocks:   {name: jinja} replacing a base's block outright ({{ super() }} works)
 #   template: whole inline Jinja body, instead of extends/title/badge/meta
 #   sidebar:  inline Jinja for the detail panel, instead of the generic dump
 #
@@ -53,15 +54,16 @@ attributes:
     - "{{ (data.args or data) | reject('in', ['type', 'label']) | join(', ') }}"
   sidebar: "<dl><dt>attributes</dt><dd>{% for k in (data.args or data) if k not in ['type', 'label'] %}<div><code>{{ k }}</code></div>{% endfor %}</dd></dl>"
 
-# Containers. Compound-ness is a state, not a type -- any node with children
-# gets a child mount -- but these two declare a header, so they collapse.
+# Containers: `_group` is `_node` plus the children mount. Compound-ness is a
+# state, not a type -- any node with children gets a mount either way -- but
+# declaring _group makes it explicit, and its CSS gives it a real header bar.
 class:
-  extends: _compound
+  extends: _group
   meta:
     - "{{ data.loc }}"
 
 group:
-  extends: _compound
+  extends: _group
   meta:
     - "{{ data.loc }}"
 

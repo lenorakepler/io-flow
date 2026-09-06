@@ -8,7 +8,7 @@
  * `html`, and this file just hands it over.
  *
  * Every node arrives with `html` — a type nobody declared still renders, via
- * the `_simple` / `_compound` base its children (or lack of them) call for — so
+ * the `_node` / `_group` base its children (or lack of them) call for — so
  * what is left here is a defensive guard, the generic sidebar dump for types
  * with no `sidebar:` of their own, and the two helpers skins reuse (`IOF.esc`,
  * `IOF.headerH`). A skin's JS may still reassign `IOF.renderNode` /

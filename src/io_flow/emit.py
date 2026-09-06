@@ -148,8 +148,6 @@ def build_html(
     # Node HTML is rendered here, from the packaged type declarations plus
     # whatever a project's own templates dir adds (`templates` pointing at a
     # *directory* rather than a .js file), plus a skin's default sidebar.
-    # Untyped/undeclared nodes come back without `html` and fall through to
-    # the packaged templates.js.
     from . import jinja_templates
 
     tpl_dir = templates if jinja_templates.is_template_dir(templates) else None

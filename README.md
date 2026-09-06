@@ -309,7 +309,7 @@ types:
     badge: queue                                   # the pill beside the title
     meta: ["{% if data.depth %}{{ data.depth }} waiting{% endif %}"]
   stage:
-    extends: _compound                             # a node that holds children
+    extends: _group                                # a node that holds children
     meta: ["{{ data.loc }}"]
   gate:
     template: '<div class="node__title">|{{ label }}|</div>'   # inline, no file
@@ -347,15 +347,16 @@ write is markup; `{{ values }}` are escaped.
 
 | field | does |
 |---|---|
-| `extends` | base to render: `_simple`, or `_compound` for a node that holds children |
+| `extends` | base to render: `_node`, or `_group` (which is `_node` plus the children mount) |
 | `title` | the name line (default `{{ label }}`) |
 | `badge` | the pill beside the title; omit for none |
 | `meta` | dimmer lines under the title — **a line that renders blank is dropped**, which is how "show `cli` only if there is one" stays a one-liner |
+| `blocks` | `{name: jinja}` replacing a base's block outright — reaches slots the fields above don't cover, and `{{ super() }}` appends instead of replacing |
 | `template` | a whole inline body, instead of `extends`/`title`/`badge`/`meta` |
 | `sidebar` | inline Jinja for the detail panel, instead of the generic data dump |
 
-Omit `extends` and the base follows the node: `_compound` when something is
-parented to it, `_simple` otherwise — compound-ness is a state, not a type. So
+Omit `extends` and the base follows the node: `_group` when something is
+parented to it, `_node` otherwise — compound-ness is a state, not a type. So
 an undeclared type still renders, and a declared one adapts if you later nest
 things inside it.
 
@@ -413,17 +414,18 @@ block defaults, so declare the cheap parts and override only the markup you
 actually care about:
 
 ```html
-{% extends "_compound.html" %}                      <!-- a node holding children -->
+{% extends "_group.html" %}                         <!-- a node holding children -->
 {% block header %}<span class="node__title">{{ label }}</span>{% endblock %}
 ```
 
-Blocks available: `title`, `badge`, `meta` in `_simple`; `header` in
-`_compound`; `rows` in `_sidebar`. `{{ super() }}` inside a block renders the
-default content, so you can add to it instead of replacing it.
+Blocks available: `title`, `badge`, `meta`, `children` in `_node`; `rows` in
+`_sidebar`. `{{ super() }}` inside a block renders the default content, so you
+can add to it instead of replacing it. A `blocks:` entry in a declaration does
+the same thing from YAML, so a file is only needed for markup a line can't hold.
 
-`_simple.html`, `_compound.html` and `_sidebar.html` ship with io-flow (as
+`_node.html`, `_group.html` and `_sidebar.html` ship with io-flow (as
 `.html.j2` files — `{% extends %}` finds either spelling; a template of your own
-with that name shadows the packaged one). `_compound.html` also documents the
+with that name shadows the packaged one). `_group.html` also documents the
 four non-obvious CSS rules a compound node needs. **Names come from the node's
 own type, never from the template it inherited** — the wrapper's `node--<type>`
 class is set by the engine from `node.type`, and `{{ type }}` inside a template
@@ -584,7 +586,9 @@ src/io_flow/
     viewer.css      <- user-editable: all node/edge styling
     templates/
       types.yaml    <- user-editable: the built-in node type declarations
-      _simple.html.j2, _compound.html.j2, _sidebar.html.j2   bases to extend
+      _node.html.j2   every node: header, title, badge, meta, children block
+      _group.html.j2  _node plus the children mount
+      _sidebar.html.j2  the generic detail panel
     templates.js    viewer fallbacks: bare-title guard + generic sidebar dump
     skins/          codemap.css + codemap.sidebar.html.j2
     engine/         layout edges dim drag pan save connect live collapse ui viewer

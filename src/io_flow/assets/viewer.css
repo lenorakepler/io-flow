@@ -157,6 +157,13 @@ body {
   outline-offset: 2px;
 }
 
+/* Every node's title + meta live in a header (see assets/templates/_node.html.j2);
+ * compounds re-lay it out as a row below. */
+.node__header {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
 .node__title {
   font-weight: 600;
   white-space: nowrap;
@@ -164,7 +171,6 @@ body {
 .node__meta {
   color: var(--muted);
   font-size: 12px;
-  margin-top: 2px;
   white-space: nowrap;
 }
 .node__meta code {
@@ -229,6 +235,7 @@ body {
   right: 0;
   height: var(--header-h);
   display: flex;
+  flex-direction: row;
   align-items: center;
   gap: 8px;
   padding: 0 10px;
@@ -271,6 +278,7 @@ body {
   right: 0;
   height: var(--header-h);
   display: flex;
+  flex-direction: row;
   align-items: center;
   gap: 8px;
   padding: 0 10px;

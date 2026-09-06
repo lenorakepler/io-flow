@@ -1,17 +1,10 @@
-{# Base: a compound node -- one that holds children.
+{# Base: a node that holds children -- `_node` plus the mount they land in.
 
-   Usually reached from a `types.yaml` declaration:
+       stage: {extends: _group, meta: ["{{ data.loc }}"]}
 
-       group: {extends: _compound, meta: ["{{ data.loc }}"]}
-
-   or extended directly by a `templates/<type>.html.j2` file:
-
-       {% extends "_compound.html" %}
-       {% block header %}<span class="node__title">{{ label }}</span>{% endblock %}
-
-   Both divs below are load-bearing, and neither failure is loud:
+   Both parts are load-bearing, and neither failure is loud:
      .node__header    -- engine/collapse.js only wires a collapse toggle when a
-                         node has one; without it the node just never collapses.
+                         node has one (it comes from `_node`, above).
      .node__children  -- where the engine mounts child nodes. Omit it and the
                          engine appends its own at the end, which is usually
                          *not* where you wanted it.
@@ -26,5 +19,5 @@
 
    (`--header-h` is the single source of truth for header height -- layout
    padding, drag clamping and collapse all read it. Don't hardcode it.) #}
-<div class="node__header">{% block header %}<span class="node__title">{{ title | default(label, true) }}</span>{% for line in meta | default([], true) %}<span class="node__meta">{{ line }}</span>{% endfor %}{% endblock %}</div>
-<div class="node__children"></div>
+{% extends "_node.html" %}
+{% block children %}<div class="node__children"></div>{% endblock %}

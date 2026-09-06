@@ -1,0 +1,33 @@
+{# Base: every node. Title, optional type badge, optional meta lines, and an
+   empty `children` block that `_group` fills in.
+
+   Usually reached from a types.yaml declaration rather than by hand:
+
+       queue: {badge: queue, meta: ["{{ data.depth }} waiting"]}
+
+   which renders this file with `title` / `badge` / `meta` already built. A
+   declaration can also replace a block outright, without a file:
+
+       queue: {blocks: {meta: '<div class="node__meta">{{ data.depth }}!</div>'}}
+
+   and a `templates/<type>.html.j2` file may extend this and override a block,
+   with the declaration's values still arriving as the block defaults.
+
+   `type` is the NODE's own type, not this file's, so a shared template still
+   renders the right badge -- and the engine sets the wrapper's `node--<type>`
+   class from the node too. Style a type with a `.node--<type>` rule in your
+   `style: skin:` css.
+
+   The `-` markers keep this readable here and tight in the artifact: every
+   node carries its rendered HTML, so stray indentation would ship per node. #}
+<div class="node__header">
+   {%- block title %}<div class="node__title">{{ title | default(label, true) }}
+      {%- block badge %}{% if badge %} <span class="node__badge">{{ badge }}</span>{% endif %}{% endblock -%}
+   </div>{% endblock -%}
+   {%- block meta -%}
+      {%- for line in meta | default([], true) %}
+<div class="node__meta">{{ line }}</div>
+      {%- endfor -%}
+   {%- endblock -%}
+</div>
+{%- block children %}{% endblock %}
