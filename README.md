@@ -90,7 +90,8 @@ Top-level keys:
 - **`relations:`** — register new relationship kinds (below).
 - **`defaults:`** — default types for untyped nodes (below).
 - **`diagram:`** — per-diagram layout config (below).
-- **`types:`** — per-diagram node type declarations (below).
+- **`types:`** — node type declarations for this diagram: what a `type:`
+  looks like when rendered (below).
 - **`layout:`** — machine-owned block written by Save; don't edit by hand.
 
 Inside a node's mapping:
@@ -287,52 +288,96 @@ touching engine code:
   kind (`.edge--calls`), restyle the sidebar, tweak the dim opacity. The
   compound-header height lives in one place (`--header-h`).
 - **type declarations** — one line of YAML per node type, plus Jinja HTML for
-  anything bigger. No JavaScript: `templates.js` now holds only a defensive
-  guard and the generic sidebar dump.
+  anything bigger. No JavaScript involved: `templates.js` holds only a
+  bare-title guard and the generic sidebar dump.
 
 ### Declaring a node type
 
-A type is a line. The built-in ones live in the packaged
-`assets/templates/types.yaml`, and you add or replace entries in three places,
-each merged over the last: a project's `templates/types.yaml`, then the
-diagram's own top-level `types:` block.
+`type:` on a node is free-form and needs no registration — `type: queue` works
+in any diagram, takes a `.node--queue` CSS class, and renders a title. A **type
+declaration** says what it should look like beyond that. One entry, one type.
+
+#### In the diagram itself
+
+A top-level `types:` block describes the types that diagram uses. Nothing else
+on disk changes:
 
 ```yaml
-# in the diagram itself — no file anywhere
+# pipeline.yaml
 types:
   queue:
-    badge: queue                                  # the pill beside the title
+    badge: queue                                   # the pill beside the title
     meta: ["{% if data.depth %}{{ data.depth }} waiting{% endif %}"]
   stage:
-    extends: _compound                            # a node that holds children
+    extends: _compound                             # a node that holds children
     meta: ["{{ data.loc }}"]
   gate:
     template: '<div class="node__title">|{{ label }}|</div>'   # inline, no file
+
+style:
+  skin: pipeline.css          # where .node--queue etc. live
+
 nodes:
-  $inbox: {type: queue, depth: 12}
+  $ingest:
+    type: stage
+    loc: src/ingest.py
+    $inbox: {type: queue, depth: 12}
+    $guard: {type: gate}
 ```
 
-Fields — every one is Jinja source, rendered with the node's own `label`, `id`,
-`type`, `data`, `parent`. Markup you write is markup; `{{ values }}` are escaped.
+`$inbox` renders as:
+
+```html
+<div class="node__title">inbox <span class="node__badge">queue</span></div>
+<div class="node__meta">12 waiting</div>
+```
+
+and colour comes from ordinary CSS in `pipeline.css`:
+
+```css
+.node--queue { border-left: 4px solid #b45309; }
+.node--queue .node__badge { background: #b45309; }
+```
+
+#### Fields
+
+Every field is Jinja source, rendered with the node's own `label`, `id`, `type`,
+`data` (its free-form YAML keys), `parent`, and the whole `node`. Markup you
+write is markup; `{{ values }}` are escaped.
 
 | field | does |
 |---|---|
-| `extends` | base to render: `_simple` (default) or `_compound` (holds children) |
+| `extends` | base to render: `_simple`, or `_compound` for a node that holds children |
 | `title` | the name line (default `{{ label }}`) |
 | `badge` | the pill beside the title; omit for none |
 | `meta` | dimmer lines under the title — **a line that renders blank is dropped**, which is how "show `cli` only if there is one" stays a one-liner |
 | `template` | a whole inline body, instead of `extends`/`title`/`badge`/`meta` |
-| `sidebar` | inline Jinja for the detail panel, instead of the generic dump |
+| `sidebar` | inline Jinja for the detail panel, instead of the generic data dump |
 
-Declaring is never *required*: an undeclared type renders the base its children
-call for — `_compound` when something is parented to it, `_simple` otherwise,
-since compound-ness is a state and not a type — still gets its `.node--<type>`
-class, still gets the generic sidebar. An explicit `extends:` overrides that
-inference. And nothing is registered — `type: whatever` needs no entry anywhere.
+Omit `extends` and the base follows the node: `_compound` when something is
+parented to it, `_simple` otherwise — compound-ness is a state, not a type. So
+an undeclared type still renders, and a declared one adapts if you later nest
+things inside it.
+
+#### Where declarations live
+
+Three layers, each merged over the last, **entry by entry** — reusing a name
+replaces that whole entry rather than merging its keys, so a type is described
+in exactly one place:
+
+| layer | scope |
+|---|---|
+| `assets/templates/types.yaml` (packaged) | io-flow's built-in types |
+| `templates/types.yaml` in your project | every diagram built with `style: {templates: templates/}` |
+| the diagram's own `types:` block | that diagram |
+
+Redeclaring a built-in is how you change one: put `method: {title: "{{ label }} [m]"}`
+in either of the upper layers and methods stop rendering `()`.
 
 The built-in types, for reference: `file`, `option`, `parameter` (badged),
 `function`, `method` (`()` suffix), `class`, `group` (compound), `attributes`,
-`input`, `node`. Read `assets/templates/types.yaml` — it is ten short entries.
+`input`, `node`. Read `assets/templates/types.yaml` — it is ten short entries,
+and it is the best documentation of the field set.
 
 ### When a line isn't enough: template files
 
@@ -525,11 +570,16 @@ src/io_flow/
   layout_store.py   layout: block read/merge (ruamel round-trip) + topology hash
   edge_store.py     append browser-created connections to edges: (append-only)
   emit.py           inline JSON + CSS + JS into one self-contained HTML
+  jinja_templates.py  render node/sidebar HTML from type declarations at build
   server.py         stdlib http.server: rebuild-on-GET, POST /save, /version
   assets/
     viewer.html     skeleton with style/graph/script slots
     viewer.css      <- user-editable: all node/edge styling
-    templates.js    <- user-editable: node templates + sidebar templates
+    templates/
+      types.yaml    <- user-editable: the built-in node type declarations
+      _simple.html.j2, _compound.html.j2, _sidebar.html.j2   bases to extend
+    templates.js    viewer fallbacks: bare-title guard + generic sidebar dump
+    skins/          codemap.css + codemap.sidebar.html.j2
     engine/         layout edges dim drag pan save connect live collapse ui viewer
     vendor/         elk.bundled.js, panzoom.min.js
 tests/              parser, layout_store, emit, server, cli
