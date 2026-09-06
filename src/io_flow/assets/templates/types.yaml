@@ -68,9 +68,6 @@ class:
 
 group:
   extends: _group
-  meta:
-    - "{{ data.loc }}"
 
-# Bare title, no badge: the default shape, spelled out so the set is visible.
-input: {}
-node: {}
+node:
+  extends: _node

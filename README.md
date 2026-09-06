@@ -380,6 +380,19 @@ rules are emitted first, since both selectors are one class and source order is
 what decides. Extending a compound type (`extends: group`) brings its children
 mount with it.
 
+**A leading underscore matters.** `_node` and `_group` are *bases* — template
+files that give structure and nothing else. `node` and `group` are *types*,
+declared in `types.yaml`, which carry a base plus fields plus a CSS class:
+
+| `extends:` | you get |
+|---|---|
+| `_group` | the children mount. No classes, so `.node--group` styling does **not** apply |
+| `group` | the same mount, *and* `node--group` on the wrapper, *and* group's declared fields |
+
+Nothing errors if you pick the wrong one — `extends: _group` renders a node that
+holds children and looks like a plain box, which is easy to mistake for "the
+declaration isn't working". If you wanted the look, drop the underscore.
+
 `class:` is the same idea without the inheritance — `class: [pill, warn]` just
 adds classes, for a look shared by types with nothing else in common. `css:` is
 not inherited or merged: a child already gets its parent's rules via the
