@@ -1,0 +1,67 @@
+/* filepanel skin — a fixed, always-open panel docked on the right. */
+#filepanel {
+  position: fixed;
+  top: 0;
+  right: 0;
+  width: 380px;
+  max-width: 45vw;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--surface, #fff);
+  border-left: 1px solid var(--line, #d9d9d9);
+  box-shadow: -2px 0 8px rgb(0 0 0 / 0.06);
+  z-index: 60;
+  font-size: 12px;
+}
+/* Keep the canvas clear of the panel. */
+body.has-filepanel #viewport {
+  right: 380px;
+}
+#filepanel .fp__head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--line, #d9d9d9);
+  background: var(--surface-2, #f4f4f5);
+}
+#filepanel .fp__name {
+  font-weight: 600;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+#filepanel .fp__lang {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  opacity: 0.6;
+}
+#filepanel .fp__body {
+  flex: 1;
+  margin: 0;
+  padding: 12px 14px;
+  overflow: auto;
+  white-space: pre;
+  tab-size: 2;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  line-height: 1.45;
+  color: var(--text, #1a1a1a);
+}
+#filepanel.fp--empty .fp__body {
+  display: none;
+}
+#filepanel.fp--empty .fp__name {
+  font-weight: 400;
+  font-family: inherit;
+  opacity: 0.6;
+}
+
+@media (prefers-color-scheme: dark) {
+  #filepanel {
+    background: var(--surface, #1e1e22);
+    border-left-color: var(--line, #333);
+  }
+  #filepanel .fp__head {
+    background: var(--surface-2, #26262b);
+  }
+}

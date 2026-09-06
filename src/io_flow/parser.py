@@ -256,7 +256,7 @@ def parse_file(path: str | Path) -> dict[str, Any]:
         data["types"], dict
     ):
         data["types"] = _load_types_value(data["types"], path.parent)
-    graph = parse(data or {})
+    graph = parse(data or {}, base_dir=path.parent)
     # Default the HTML title to the source filename; an explicit YAML
     # ``title:`` (set in parse()) takes precedence.
     graph.setdefault("title", f"io-flow: {path.stem}")
@@ -349,10 +349,24 @@ def _legend(block: Any) -> dict[str, Any]:
     return out
 
 
-def parse(data: dict[str, Any]) -> dict[str, Any]:
-    """Parse an already-loaded YAML mapping into the graph model."""
+_SRC_LANG = {
+    "py": "python", "yaml": "yaml", "yml": "yaml", "json": "json",
+    "md": "markdown", "markdown": "markdown", "txt": "text",
+}
+_SRC_MAX_BYTES = 256 * 1024  # cap embedded file size so the HTML stays sane
+
+
+def parse(data: dict[str, Any], base_dir: Path | None = None) -> dict[str, Any]:
+    """Parse an already-loaded YAML mapping into the graph model.
+
+    ``base_dir`` (set by ``parse_file``) is where a node's ``src:`` file path
+    resolves from; its text is embedded in ``graph['fileContents']`` so a viewer
+    panel can show it with no filesystem at runtime. Without a ``base_dir``,
+    ``src:`` is left as plain data (no embedding)."""
     nodes: list[dict[str, Any]] = []
     seen: set[str] = set()
+    # node id -> {name, lang, text, truncated}; embedded file bodies for src:.
+    file_contents: dict[str, dict[str, Any]] = {}
 
     edge_keys, relation_anchors = _edge_keys_for(data)
 
@@ -502,6 +516,22 @@ def parse(data: dict[str, Any]) -> dict[str, Any]:
                 "data": _plain(node_data),
             }
         )
+        # `src:` names a file whose text is embedded for a viewer panel to show.
+        src = node_data.get("src")
+        if base_dir is not None and isinstance(src, str):
+            p = Path(src).expanduser()
+            p = p if p.is_absolute() else base_dir / p
+            if not p.exists():
+                raise ValueError(f"{SIGIL}{node_id}.src: file not found: {p}")
+            raw = p.read_bytes()
+            truncated = len(raw) > _SRC_MAX_BYTES
+            text = raw[:_SRC_MAX_BYTES].decode("utf-8", errors="replace")
+            file_contents[node_id] = {
+                "name": p.name,
+                "lang": _SRC_LANG.get(p.suffix.lstrip(".").lower(), p.suffix.lstrip(".").lower() or "text"),
+                "text": text,
+                "truncated": truncated,
+            }
         record_edges(node_id, spec)
         # Descriptor fields (registered in `descriptors:`) expand into synthetic
         # child boxes, emitted before real children so they sit first. The value
@@ -701,6 +731,8 @@ def parse(data: dict[str, Any]) -> dict[str, Any]:
         unique.append(edge)
 
     graph: dict[str, Any] = {"nodes": nodes, "edges": unique}
+    if file_contents:
+        graph["fileContents"] = file_contents
     # Which node keys were relation blocks rather than free data -- built-ins
     # plus anything `relations:` registered. Templates use it (as `fields`) to
     # list a node's own data without the wiring; build-time only.

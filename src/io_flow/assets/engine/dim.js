@@ -93,6 +93,9 @@ window.IOFlow = window.IOFlow || {};
     showSidebar(state, id);
     if (IOF.a11y) IOF.a11y.onSelect(state, id);
     if (IOF.anchors) IOF.anchors.refresh(state);
+    // Extension point for skins (e.g. the filepanel skin): a select event any
+    // skin JS can listen for without the engine knowing about it.
+    document.dispatchEvent(new CustomEvent("ioflow:select", { detail: { id } }));
   }
 
   function clear(state) {
@@ -101,6 +104,7 @@ window.IOFlow = window.IOFlow || {};
     state.graph.nodes.forEach((n) => state.nodeEls[n.id].classList.remove("dimmed"));
     state.edgeEls.forEach(({ el }) => el.classList.remove("dimmed"));
     hideSidebar();
+    document.dispatchEvent(new CustomEvent("ioflow:clear"));
     if (hadSelection && IOF.a11y) IOF.a11y.onClear();
     if (IOF.anchors) IOF.anchors.refresh(state);
   }

@@ -5,6 +5,23 @@ stand, why, and what would come next.
 
 ## Done
 
+### `filepanel` skin — embedded file viewer
+
+A node declares `src: path/to/file`; the parser reads it (relative to the YAML,
+256KB cap) into `graph.fileContents` — kept out of `node.data` so it doesn't
+bloat the default sidebar. The bundled `filepanel` skin (opt-in via
+`style: skin: [..., filepanel]`) is an always-open right-docked panel that shows
+that file's text on click. `dim.js` fires `ioflow:select` / `ioflow:clear` DOM
+events as the extension point (any skin can listen).
+
+- `parser.py` (`src:` embed, `parse(base_dir=...)`), `dim.js` (events),
+  `assets/skins/filepanel.{js,css}`. Tests: `test_src_*`.
+- v1 shows plain monospace text. `lang` is exposed as `language-<lang>` on the
+  `<code>`. **Next:** render markdown to HTML; consider a small inlined syntax
+  highlighter for code (bundling one is heavy for a self-contained file).
+- Note: embedding puts file text in the built HTML — do not `src:` secrets, and
+  gitignore the built HTML if it embeds anything not meant to be committed.
+
 ### `types:` from an external file
 
 `types:` accepts, besides the inline mapping, a **file path** to a YAML file of

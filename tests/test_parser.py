@@ -1067,3 +1067,29 @@ def test_types_missing_file_is_an_error(tmp_path):
     (tmp_path / "d.yaml").write_text("types: nope.yaml\nnodes: {$a: {}}\n", encoding="utf-8")
     with pytest.raises(ValueError, match="file not found"):
         parse_file(tmp_path / "d.yaml")
+
+
+def test_src_embeds_file_contents(tmp_path):
+    (tmp_path / "hello.py").write_text("print('hi')\n", encoding="utf-8")
+    (tmp_path / "d.yaml").write_text(
+        "nodes: {$a: {type: file, src: hello.py}}\n", encoding="utf-8"
+    )
+    g = parse_file(tmp_path / "d.yaml")
+    fc = g["fileContents"]["a"]
+    assert fc["name"] == "hello.py"
+    assert fc["lang"] == "python"
+    assert fc["text"] == "print('hi')\n"
+    assert fc["truncated"] is False
+
+
+def test_src_missing_file_errors(tmp_path):
+    (tmp_path / "d.yaml").write_text("nodes: {$a: {src: nope.py}}\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="src: file not found"):
+        parse_file(tmp_path / "d.yaml")
+
+
+def test_src_without_base_dir_is_plain_data():
+    # parse() called directly (no file context) leaves src as data, no embedding.
+    g = parse({"nodes": {"$a": {"src": "x.py"}}})
+    assert "fileContents" not in g
+    assert _node(g, "a")["data"]["src"] == "x.py"
