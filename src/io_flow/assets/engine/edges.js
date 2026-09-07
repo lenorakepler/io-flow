@@ -313,7 +313,7 @@ window.IOFlow = window.IOFlow || {};
       const hidden =
         ep.hidden ||
         (offT && offT.has(rec.edge.type)) ||
-        (offG && offG.has(rec.edge.group));
+        groupHidden(offG, rec.edge.group);
       rec.el.style.display = hidden ? "none" : "";
       if (rec.label) rec.label.style.display = hidden ? "none" : "";
       // Skip geometry only when an endpoint is collapsed away (no route to
@@ -406,6 +406,17 @@ window.IOFlow = window.IOFlow || {};
 
   // Show/hide every edge of a type (legend toggles). Reapplies the current
   // geometry so it survives later re-routes.
+  // An edge's `group` may be a string or a list. It's group-hidden only when
+  // it HAS a group and every one of its groups is toggled off (so any visible
+  // group shows it). No group -> never group-hidden.
+  function groupHidden(off, group) {
+    if (!off || group == null) return false;
+    if (Array.isArray(group)) return group.length > 0 && group.every((g) => off.has(g));
+    return off.has(group);
+  }
+  IOF.edges = IOF.edges || {};
+  IOF.groupHidden = groupHidden;
+
   function setEdgeTypeHidden(state, type, hidden) {
     const off = state.hiddenEdgeTypes || (state.hiddenEdgeTypes = new Set());
     if (hidden) off.add(type);

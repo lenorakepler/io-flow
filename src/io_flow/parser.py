@@ -449,7 +449,9 @@ def parse(data: dict[str, Any], base_dir: Path | None = None) -> dict[str, Any]:
             block_group = None
             if isinstance(block, dict):
                 g = block.get("group")
-                if g is not None and not str(g).startswith(SIGIL):
+                if isinstance(g, (list, tuple)):
+                    block_group = [str(x) for x in g]  # an edge may be in many groups
+                elif g is not None and not str(g).startswith(SIGIL):
                     block_group = str(g)
             for key, value in block.items():
                 key = str(key)
@@ -662,9 +664,12 @@ def parse(data: dict[str, Any], base_dir: Path | None = None) -> dict[str, Any]:
             edge["weight"] = annotation
         elif isinstance(annotation, str) and annotation:
             edge["label"] = annotation
-        # A block-level `group:` wins over the node's own `group:`.
+        # A block-level `group:` wins over the node's own `group:`. May be a
+        # list (edge belongs to several groups).
         grp = block_group if block_group is not None else node_group.get(owner)
-        if grp is not None:
+        if isinstance(grp, (list, tuple)):
+            edge["group"] = [str(x) for x in grp]
+        elif grp is not None:
             edge["group"] = str(grp)
         if edge_type in relation_anchors:
             edge["anchor"] = relation_anchors[edge_type]
@@ -739,7 +744,9 @@ def parse(data: dict[str, Any], base_dir: Path | None = None) -> dict[str, Any]:
         group = spec.get("group")
         if group is None and owner is not None:
             group = node_group.get(owner)
-        if group is not None:
+        if isinstance(group, (list, tuple)):
+            edge["group"] = [str(x) for x in group]
+        elif group is not None:
             edge["group"] = str(group)
         # Endpoint pinning: an explicit anchor wins; otherwise a typed edge
         # inherits its relation's default anchor, so explicit `inherits`

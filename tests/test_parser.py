@@ -1154,3 +1154,11 @@ def test_relation_block_group_overrides_node_group():
     creates = [e for e in g["edges"] if e["type"] == "creates"][0]
     assert drives["group"] == "nodeg"   # inherits node group (no block group)
     assert creates["group"] == "g6"     # block group overrides node group
+
+
+def test_edge_group_can_be_a_list():
+    g = parse({
+        "relations": {"writes": {"direction": "out"}},
+        "nodes": {"$s": {"writes": {"group": ["s6", "s7"], "$e": ""}}, "$e": {}},
+    })
+    assert g["edges"][0]["group"] == ["s6", "s7"]

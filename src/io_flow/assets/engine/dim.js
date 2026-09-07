@@ -95,7 +95,7 @@ window.IOFlow = window.IOFlow || {};
       if (on) {
         el.style.display = "";
         if (label) label.style.display = "";
-      } else if ((offT && offT.has(edge.type)) || (offG && offG.has(edge.group))) {
+      } else if ((offT && offT.has(edge.type)) || (IOF.groupHidden && IOF.groupHidden(offG, edge.group))) {
         el.style.display = "none";
         if (label) label.style.display = "none";
       }
