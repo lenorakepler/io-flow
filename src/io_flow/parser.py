@@ -442,8 +442,19 @@ def parse(data: dict[str, Any], base_dir: Path | None = None) -> dict[str, Any]:
     def record_edges(node_id: str, spec: dict[str, Any]) -> None:
         """Queue every relation-block entry on ``spec`` for pass 2."""
         for edge_type in edge_keys:
-            for key, value in (spec.get(edge_type, {}) or {}).items():
+            block = spec.get(edge_type, {}) or {}
+            # An unmarked `group:` inside a relation block tags every edge that
+            # block derives (overriding the node's own `group:`), so a node can
+            # split its relations across groups -- e.g. `reads: {group: s2, ...}`.
+            block_group = None
+            if isinstance(block, dict):
+                g = block.get("group")
+                if g is not None and not str(g).startswith(SIGIL):
+                    block_group = str(g)
+            for key, value in block.items():
                 key = str(key)
+                if key == "group" and block_group is not None:
+                    continue  # the block-level group tag, not an edge
                 key_ref = key.startswith(SIGIL)
                 value_ref = isinstance(value, str) and value.startswith(SIGIL)
                 if key_ref and value_ref:
@@ -454,10 +465,10 @@ def parse(data: dict[str, Any], base_dir: Path | None = None) -> dict[str, Any]:
                 if key_ref:
                     # Unmarked value annotates the edge: a string is label
                     # text ("" = none), a number is a flow weight.
-                    sites.append((node_id, edge_type, _strip(key), value, None))
+                    sites.append((node_id, edge_type, _strip(key), value, None, block_group))
                 elif value_ref:
                     # Unmarked key is a name for the connection (arg name).
-                    sites.append((node_id, edge_type, _strip(value), None, key))
+                    sites.append((node_id, edge_type, _strip(value), None, key, block_group))
                 else:
                     # Pure literal entry (e.g. a default value); no edge. Pass 2
                     # warns if either side exactly matches a node id.
@@ -632,7 +643,12 @@ def parse(data: dict[str, Any], base_dir: Path | None = None) -> dict[str, Any]:
             stacklevel=3,
         )
 
-    for owner, edge_type, ref, annotation, context_key in sites:
+    # A node may carry a `group:` -- its relation-block edges (and in-node
+    # explicit edges) inherit it, so you can declare an edge where the node is
+    # and still have it grouped (e.g. a stage-specific step tagging all its
+    # edges with that stage).
+    node_group = {n["id"]: (n.get("data") or {}).get("group") for n in nodes}
+    for owner, edge_type, ref, annotation, context_key, block_group in sites:
         if ref not in node_ids:
             where = f"for {owner}.{context_key}" if context_key else f"({edge_type}) from {owner}"
             _warn_unresolved(ref, where)
@@ -646,6 +662,10 @@ def parse(data: dict[str, Any], base_dir: Path | None = None) -> dict[str, Any]:
             edge["weight"] = annotation
         elif isinstance(annotation, str) and annotation:
             edge["label"] = annotation
+        # A block-level `group:` wins over the node's own `group:`.
+        grp = block_group if block_group is not None else node_group.get(owner)
+        if grp is not None:
+            edge["group"] = str(grp)
         if edge_type in relation_anchors:
             edge["anchor"] = relation_anchors[edge_type]
         edges.append(edge)
@@ -714,13 +734,13 @@ def parse(data: dict[str, Any], base_dir: Path | None = None) -> dict[str, Any]:
             edge["weight"] = weight
         # `group:` is a free tag for toggling a whole set of edges together
         # (e.g. by stage), independent of `type:`. An explicit group wins;
-        # otherwise an edge declared *inside* a node inherits that node as its
-        # group, so grouping falls out of where you write the edge. Viewer-only.
+        # otherwise an edge declared *inside* a node inherits that node's own
+        # `group:` field, so grouping falls out of where you write the edge.
         group = spec.get("group")
+        if group is None and owner is not None:
+            group = node_group.get(owner)
         if group is not None:
             edge["group"] = str(group)
-        elif owner is not None:
-            edge["group"] = owner
         # Endpoint pinning: an explicit anchor wins; otherwise a typed edge
         # inherits its relation's default anchor, so explicit `inherits`
         # entries render like derived ones.

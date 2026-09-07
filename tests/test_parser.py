@@ -1095,10 +1095,25 @@ def test_src_without_base_dir_is_plain_data():
     assert _node(g, "a")["data"]["src"] == "x.py"
 
 
-def test_node_declared_edge_inherits_node_as_group():
+def test_node_group_field_flows_to_its_edges():
+    # A node's `group:` is inherited by its in-block edges (explicit + relation).
+    g = parse({
+        "relations": {"reads": {"direction": "in"}},
+        "nodes": {
+            "$a": {"group": "g1", "edges": [{"to": "$b", "type": "x"}], "reads": {"$c": ""}},
+            "$b": {}, "$c": {},
+        },
+    })
+    x = [e for e in g["edges"] if e.get("type") == "x"][0]
+    r = [e for e in g["edges"] if e.get("type") == "reads"][0]
+    assert x["group"] == "g1"
+    assert r["group"] == "g1"  # relation-block edge inherits it too
+
+
+def test_node_without_group_gives_ungrouped_edges():
     g = parse({"nodes": {"$a": {"edges": [{"to": "$b", "type": "x"}]}, "$b": {}}})
     e = [e for e in g["edges"] if e.get("type") == "x"][0]
-    assert e["group"] == "a"
+    assert "group" not in e
 
 
 def test_explicit_group_overrides_owner():
@@ -1120,3 +1135,22 @@ def test_legend_groups_parsed():
     groups = g["legend"]["groups"]
     assert groups[0] == {"group": "stage0", "label": "Stage 0"}
     assert groups[1] == {"group": "stage1", "label": "stage1"}
+
+
+def test_relation_block_group_overrides_node_group():
+    g = parse({
+        "relations": {"reads": {"direction": "in"}, "creates": {"direction": "out"},
+                      "drives": {"direction": "out"}},
+        "nodes": {
+            "$s": {
+                "group": "nodeg",
+                "drives": {"$st": ""},                 # ungrouped-in-block? gets node group
+                "creates": {"group": "g6", "$e": ""},  # block group wins
+            },
+            "$st": {}, "$e": {},
+        },
+    })
+    drives = [e for e in g["edges"] if e["type"] == "drives"][0]
+    creates = [e for e in g["edges"] if e["type"] == "creates"][0]
+    assert drives["group"] == "nodeg"   # inherits node group (no block group)
+    assert creates["group"] == "g6"     # block group overrides node group
