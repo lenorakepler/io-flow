@@ -373,13 +373,16 @@ window.IOFlow = window.IOFlow || {};
     });
 
     const g = new dagre.graphlib.Graph({ compound: true, multigraph: true });
-    g.setGraph({
+    // Shared knobs map to dagre's; `diagram: dagre: {...}` is a raw passthrough
+    // (highest precedence) for dagre-only options -- ranker, align, edgesep,
+    // acyclicer, ... -- mirroring the `elk:` block on the ELK path.
+    g.setGraph(Object.assign({
       rankdir,
       nodesep: Number(cfg.spacing) || 40,
       ranksep: Number(cfg.layerSpacing) || 70,
       marginx: 16,
       marginy: 16,
-    });
+    }, cfg.dagre || {}));
     g.setDefaultEdgeLabel(() => ({}));
 
     graph.nodes.forEach((n) => {

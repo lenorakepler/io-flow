@@ -39,7 +39,9 @@ diagram:
   direction: DOWN
   spacing: 28
   layerSpacing: 60
-  elk:
+  engine: dagre # this diagram lays out better with dagre than ELK (set `elk` or omit for ELK)
+  # dagre-only passthrough (highest precedence): { ranker: network-simplex, align: DL, edgesep: 12 }
+  elk: # ignored while engine is dagre; kept for an easy A/B by flipping `engine`
     elk.layered.nodePlacement.strategy: NETWORK_SIMPLEX
     elk.layered.considerModelOrder.strategy: NODES_AND_EDGES
     elk.layered.crossingMinimization.strategy: LAYER_SWEEP
@@ -66,7 +68,12 @@ nodes:
     desc: Download enriched Illumina reads for one sample (BioProject PRJNA679286).
     params: { bioproject: PRJNA679286 }
     output: { reads: $reads }
-  $reads: { type: file, label: reads, path: "resources/reads/{sample}_R{1,2}.fastq.gz" }
+  $reads:
+    {
+      type: file,
+      label: reads,
+      path: "resources/reads/{sample}_R{1,2}.fastq.gz",
+    }
 
   $download_human_reference:
     type: rule
@@ -80,35 +87,60 @@ nodes:
     tool: fetch_contaminants.sh
     desc: rRNA / common-contaminant reference for the post-host screen.
     output: { ref: $contaminants_db }
-  $contaminants_db: { type: file, label: contaminants, path: "resources/reference/contaminants.fa" }
+  $contaminants_db:
+    {
+      type: file,
+      label: contaminants,
+      path: "resources/reference/contaminants.fa",
+    }
 
   $download_typing_db:
     type: rule
     tool: fetch_typing_db.sh
     desc: 728-sequence anellovirus ORF1 typing database (genus assignment by tblastx).
     output: { db: $typing_db }
-  $typing_db: { type: file, label: typing_db, path: "resources/reference/anello_typing_ORF1.fasta" }
+  $typing_db:
+    {
+      type: file,
+      label: typing_db,
+      path: "resources/reference/anello_typing_ORF1.fasta",
+    }
 
   $download_public_anellovirus_genomes:
     type: rule
     tool: fetch_public_anelloviruses.sh
     desc: Curated public anellovirus genomes, pooled with study contigs for the ORF1 dataset.
     output: { genomes: $public_genomes }
-  $public_genomes: { type: file, label: public_genomes, path: "resources/reference/public_anellovirus_genomes.fasta" }
+  $public_genomes:
+    {
+      type: file,
+      label: public_genomes,
+      path: "resources/reference/public_anellovirus_genomes.fasta",
+    }
 
   $download_comparison_marker:
     type: rule
     tool: fetch_comparison_marker.sh
     desc: One protein marker per Figure-1 comparison virus (HIV env, HPV L1, dengue envelope, ...).
     output: { marker: $comparison_marker }
-  $comparison_marker: { type: file, label: comparison_marker, path: "resources/reference/comparison/{virus}.fasta" }
+  $comparison_marker:
+    {
+      type: file,
+      label: comparison_marker,
+      path: "resources/reference/comparison/{virus}.fasta",
+    }
 
   $download_metadata:
     type: rule
     tool: fetch_metadata.sh
     desc: "Cohort metadata: draw days, pan-anello PCR status, per-sample ORF1/contig counts."
     output: { metadata: $metadata }
-  $metadata: { type: file, label: metadata, path: "resources/metadata/RingTx_transfusion1_metadata.csv" }
+  $metadata:
+    {
+      type: file,
+      label: metadata,
+      path: "resources/metadata/RingTx_transfusion1_metadata.csv",
+    }
 
   $download_nanopore:
     type: rule
@@ -116,7 +148,12 @@ nodes:
     desc: Raw Oxford Nanopore long reads for a sample (contig-validation input).
     params: { bioproject: PRJNA679286 }
     output: { reads: $nanopore_reads }
-  $nanopore_reads: { type: file, label: nanopore_reads, path: "resources/nanopore/{sample}.fastq.gz" }
+  $nanopore_reads:
+    {
+      type: file,
+      label: nanopore_reads,
+      path: "resources/nanopore/{sample}.fastq.gz",
+    }
 
   # ###########################################################################
   # UPSTREAM STAGE 1 — READ QC AND HOST REMOVAL (grouped: wiring is internal)
@@ -133,16 +170,29 @@ nodes:
       desc: "FastQC on the raw reads: per-sample quality report before trimming."
       input: { reads: $reads }
       output: { report: $fastqc_report }
-    $fastqc_report: { type: file, label: fastqc, path: "results/qc/fastqc/{sample}_fastqc.zip" }
+    $fastqc_report:
+      {
+        type: file,
+        label: fastqc,
+        path: "results/qc/fastqc/{sample}_fastqc.zip",
+      }
 
     $bbduk_trim:
       type: rule
       tool: bbduk.sh
       desc: Adapter and quality trimming with bbduk.
-      params: { opts: "ktrim=r k=23 mink=11 tpe tbo qtrim=rl trimq=20 minlength=50 maxns=2" }
+      params:
+        {
+          opts: "ktrim=r k=23 mink=11 tpe tbo qtrim=rl trimq=20 minlength=50 maxns=2",
+        }
       input: { reads: $reads }
       output: { reads: $trimmed }
-    $trimmed: { type: file, label: trimmed, path: "results/trimmed/{sample}_R{1,2}.fastq.gz" }
+    $trimmed:
+      {
+        type: file,
+        label: trimmed,
+        path: "results/trimmed/{sample}_R{1,2}.fastq.gz",
+      }
 
     $remove_human_ngm:
       type: rule
@@ -151,7 +201,12 @@ nodes:
       params: { opts: "--affine -s 0.7 -p" }
       input: { reads: $trimmed, ref: $grch37 }
       output: { reads: $dehost1 }
-    $dehost1: { type: file, label: dehost1, path: "results/dehost1/{sample}_R{1,2}.fastq.gz" }
+    $dehost1:
+      {
+        type: file,
+        label: dehost1,
+        path: "results/dehost1/{sample}_R{1,2}.fastq.gz",
+      }
 
     $remove_human_bwa:
       type: rule
@@ -159,7 +214,12 @@ nodes:
       desc: "Host removal pass 2: a second BWA pass against GRCh37 catches what pass 1 missed."
       input: { reads: $dehost1, ref: $grch37 }
       output: { reads: $dehost2 }
-    $dehost2: { type: file, label: dehost2, path: "results/dehost2/{sample}_R{1,2}.fastq.gz" }
+    $dehost2:
+      {
+        type: file,
+        label: dehost2,
+        path: "results/dehost2/{sample}_R{1,2}.fastq.gz",
+      }
 
     $screen_contaminants:
       type: rule
@@ -168,7 +228,12 @@ nodes:
       params: { opts: "minid=0.95 bwr=0.16 bw=12" }
       input: { reads: $dehost2, ref: $contaminants_db }
       output: { reads: $screened }
-    $screened: { type: file, label: screened, path: "results/screened/{sample}_R{1,2}.fastq.gz" }
+    $screened:
+      {
+        type: file,
+        label: screened,
+        path: "results/screened/{sample}_R{1,2}.fastq.gz",
+      }
 
     $dedupe_clumpify:
       type: rule
@@ -185,8 +250,14 @@ nodes:
       output: { counts: $read_counts }
 
   # clean reads and read counts leave stage 1 -> hoisted to the top level.
-  $clean: { type: file, label: clean, path: "results/clean/{sample}_R{1,2}.fastq.gz" }
-  $read_counts: { type: file, label: read_counts, path: "results/qc/read_counts/{sample}.tsv" }
+  $clean:
+    { type: file, label: clean, path: "results/clean/{sample}_R{1,2}.fastq.gz" }
+  $read_counts:
+    {
+      type: file,
+      label: read_counts,
+      path: "results/qc/read_counts/{sample}.tsv",
+    }
 
   # ###########################################################################
   # UPSTREAM STAGE 2 — ASSEMBLY AND CIRCULAR-GENOME RECOVERY (grouped)
@@ -204,7 +275,12 @@ nodes:
       params: { opts: "--only-assembler" }
       input: { reads: $clean }
       output: { contigs: $contigs }
-    $contigs: { type: file, label: contigs, path: "results/assembly/{sample}/contigs.fasta" }
+    $contigs:
+      {
+        type: file,
+        label: contigs,
+        path: "results/assembly/{sample}/contigs.fasta",
+      }
 
     $prinseq_lowcomplexity:
       type: rule
@@ -230,46 +306,62 @@ nodes:
       output: { circular: $circular_contigs }
 
   # Hubs leaving stage 2 -> top level.
-  $contigs_dust: { type: file, label: contigs_dust, path: "results/assembly/{sample}/contigs.dust.fasta" }
-  $nr_contigs: { type: file, label: nr_contigs, path: "results/contigs/anello_contigs.nr.fasta" }
-  $circular_contigs: { type: file, label: circular, path: "results/contigs/anello_contigs.circular.fasta" }
+  $contigs_dust:
+    {
+      type: file,
+      label: contigs_dust,
+      path: "results/assembly/{sample}/contigs.dust.fasta",
+    }
+  $nr_contigs:
+    {
+      type: file,
+      label: nr_contigs,
+      path: "results/contigs/anello_contigs.nr.fasta",
+    }
+  $circular_contigs:
+    {
+      type: file,
+      label: circular,
+      path: "results/contigs/anello_contigs.circular.fasta",
+    }
 
   # ###########################################################################
   # UPSTREAM STAGE 3 — ORF ANNOTATION AND GENUS TYPING (grouped)
   # ###########################################################################
-  $stage3_orf_typing:
-    type: stage
-    question: Where is ORF1 on each contig, and which genus does the contig belong to?
-    purpose: Extract the ORF1 protein marker used downstream, and label each contig Alpha/Beta/Gamma.
-    interpretation: ORF1 is the one marker present family-wide, so it anchors all cross-genus comparisons.
+  # $stage3_orf_typing:
+  # type: stage
+  # question: Where is ORF1 on each contig, and which genus does the contig belong to?
+  # purpose: Extract the ORF1 protein marker used downstream, and label each contig Alpha/Beta/Gamma.
+  # interpretation: ORF1 is the one marker present family-wide, so it anchors all cross-genus comparisons.
 
-    $orfm_call:
-      type: rule
-      tool: orfm
-      desc: "OrfM: call ORFs on every non-redundant contig."
-      params: { opts: "-p -s -m 150" }
-      input: { nr: $nr_contigs }
-      output: { orfs: $all_orfs }
+  $orfm_call:
+    type: rule
+    tool: orfm
+    desc: "OrfM: call ORFs on every non-redundant contig."
+    params: { opts: "-p -s -m 150" }
+    input: { nr: $nr_contigs }
+    output: { orfs: $all_orfs }
 
-    $filter_orf1:
-      type: rule
-      tool: filter_orf1.py
-      desc: Keep ORF1 only — proteins >=600 aa with the anellovirus ORF1 motif (YNP..D.G..).
-      params: { min_len: 600, motif: "YNP.{2}D.G.{2}" }
-      input: { orfs: $all_orfs }
-      output: { orf1: $orf1 }
+  $filter_orf1:
+    type: rule
+    tool: filter_orf1.py
+    desc: Keep ORF1 only — proteins >=600 aa with the anellovirus ORF1 motif (YNP..D.G..).
+    params: { min_len: 600, motif: "YNP.{2}D.G.{2}" }
+    input: { orfs: $all_orfs }
+    output: { orf1: $orf1 }
 
-    $tblastx_genus:
-      type: rule
-      tool: tblastx_type.sh
-      desc: Assign each contig to a genus by tblastx against the 728-sequence typing DB.
-      input: { contigs: $nr_contigs, db: $typing_db }
-      output: { genus: $contig_genus }
+  $tblastx_genus:
+    type: rule
+    tool: tblastx_type.sh
+    desc: Assign each contig to a genus by tblastx against the 728-sequence typing DB.
+    input: { contigs: $nr_contigs, db: $typing_db }
+    output: { genus: $contig_genus }
 
   # All three typing outputs are consumed by several later stages -> top level.
   $all_orfs: { type: file, label: all_orfs, path: "results/orfs/all_orfs.faa" }
   $orf1: { type: file, label: orf1, path: "results/orfs/orf1.faa" }
-  $contig_genus: { type: file, label: contig_genus, path: "results/typing/contig_genus.tsv" }
+  $contig_genus:
+    { type: file, label: contig_genus, path: "results/typing/contig_genus.tsv" }
 
   # ###########################################################################
   # UPSTREAM STAGE 4 — LINEAGE CLUSTERING AND ABUNDANCE (grouped)
@@ -287,7 +379,12 @@ nodes:
       params: { identity: "0.975" }
       input: { orf1: $orf1 }
       output: { centroids: $lineage_centroids, membership: $lineage_membership }
-    $lineage_centroids: { type: file, label: centroids, path: "results/lineages/orf1_lineages.faa" }
+    $lineage_centroids:
+      {
+        type: file,
+        label: centroids,
+        path: "results/lineages/orf1_lineages.faa",
+      }
 
     $novoalign_abundance:
       type: rule
@@ -296,7 +393,12 @@ nodes:
       params: { opts: "-H 15 -l 30 -t 500 -r Random -g 50 -x 6 -F STDFQ" }
       input: { reads: $clean, centroids: $lineage_centroids }
       output: { counts: $abundance_counts }
-    $abundance_counts: { type: file, label: abundance, path: "results/abundance/{sample}.counts.tsv" }
+    $abundance_counts:
+      {
+        type: file,
+        label: abundance,
+        path: "results/abundance/{sample}.counts.tsv",
+      }
 
     $recipient_rabund_table:
       type: rule
@@ -306,8 +408,18 @@ nodes:
       output: { rabund: $rabund_table }
 
   # membership (-> Fig 2C) and rabund (-> Figs 3, 4) leave the stage -> top level.
-  $lineage_membership: { type: file, label: membership, path: "results/lineages/orf1_lineage_membership.tsv" }
-  $rabund_table: { type: file, label: rabund, path: "results/abundance/{recipient}.rabund.final.txt" }
+  $lineage_membership:
+    {
+      type: file,
+      label: membership,
+      path: "results/lineages/orf1_lineage_membership.tsv",
+    }
+  $rabund_table:
+    {
+      type: file,
+      label: rabund,
+      path: "results/abundance/{recipient}.rabund.final.txt",
+    }
 
   # ###########################################################################
   # DERIVE SEQUENCE SUBSETS (flat — each extractor feeds a different figure)
@@ -318,7 +430,8 @@ nodes:
     desc: Extract a genome feature (5'UTR / contig / ORF1 nt / ORF2 nt) for the Figure-S3 SDT matrices.
     input: { contigs: $nr_contigs, orfs: $all_orfs }
     output: { feature: $feature_fasta }
-  $feature_fasta: { type: file, label: feature, path: "results/features/{feature}.fasta" }
+  $feature_fasta:
+    { type: file, label: feature, path: "results/features/{feature}.fasta" }
 
   $build_coding_cluster:
     type: rule
@@ -327,7 +440,12 @@ nodes:
     params: { identity: "0.80" }
     input: { contigs: $nr_contigs, genus: $contig_genus }
     output: { cluster: $cluster_fasta }
-  $cluster_fasta: { type: file, label: cluster, path: "results/clusters/anello_80.0_{cluster}.fasta" }
+  $cluster_fasta:
+    {
+      type: file,
+      label: cluster,
+      path: "results/clusters/anello_80.0_{cluster}.fasta",
+    }
 
   $extract_noncoding:
     type: rule
@@ -335,7 +453,8 @@ nodes:
     desc: Extract a non-coding set (5'UTR / non-coding / alpha non-coding) for the Figure-S5 analysis.
     input: { contigs: $nr_contigs, orfs: $all_orfs }
     output: { ncset: $noncoding_fasta }
-  $noncoding_fasta: { type: file, label: noncoding, path: "results/noncoding/{ncset}.fasta" }
+  $noncoding_fasta:
+    { type: file, label: noncoding, path: "results/noncoding/{ncset}.fasta" }
 
   # ###########################################################################
   # ANALYSIS — FIGURE 1  (grouped chain; its MDS is shared with Figure 2C)
@@ -352,7 +471,12 @@ nodes:
       desc: "Build the 2,101-sequence ORF1 dataset: study ORF1s pooled with public ORF1s."
       input: { study: $orf1, public: $public_genomes }
       output: { dataset: $orf1_dataset }
-    $orf1_dataset: { type: file, label: ORF1_dataset, path: "results/figure_1/Anellos_ORF1.fasta" }
+    $orf1_dataset:
+      {
+        type: file,
+        label: ORF1_dataset,
+        path: "results/figure_1/Anellos_ORF1.fasta",
+      }
 
     $align_anello_orf1:
       type: rule
@@ -361,7 +485,12 @@ nodes:
       params: { opts: "--maxiterate 1000 --retree 2" }
       input: { dataset: $orf1_dataset }
       output: { aln: $orf1_aln }
-    $orf1_aln: { type: file, label: ORF1_aln, path: "results/figure_1/Anellos_ORF1.aln.fasta" }
+    $orf1_aln:
+      {
+        type: file,
+        label: ORF1_aln,
+        path: "results/figure_1/Anellos_ORF1.aln.fasta",
+      }
 
     $anello_orf1_pmatrix:
       type: rule
@@ -369,7 +498,12 @@ nodes:
       desc: Pairwise amino-acid p-distance matrix from the ORF1 alignment (the MDS input).
       input: { aln: $orf1_aln }
       output: { pmatrix: $orf1_pmatrix }
-    $orf1_pmatrix: { type: file, label: ORF1_pmatrix, path: "results/figure_1/Anellos_ORF1.p_matrix.tsv" }
+    $orf1_pmatrix:
+      {
+        type: file,
+        label: ORF1_pmatrix,
+        path: "results/figure_1/Anellos_ORF1.p_matrix.tsv",
+      }
 
     $anello_orf1_mds:
       type: rule
@@ -384,7 +518,12 @@ nodes:
       desc: align -> p-distance -> MDS chain for each comparison virus's marker (one leaf per virus).
       input: { marker: $comparison_marker }
       output: { aln: $comparison_aln }
-    $comparison_aln: { type: file, label: comp_aln, path: "results/figure_1/{virus}.aln.fasta" }
+    $comparison_aln:
+      {
+        type: file,
+        label: comp_aln,
+        path: "results/figure_1/{virus}.aln.fasta",
+      }
 
     $comparison_pmatrix:
       type: rule
@@ -392,7 +531,12 @@ nodes:
       desc: p-distance matrix for one comparison virus's marker.
       input: { aln: $comparison_aln }
       output: { pmatrix: $comp_pmatrix }
-    $comp_pmatrix: { type: file, label: comp_pmatrix, path: "results/figure_1/{virus}.p_matrix.tsv" }
+    $comp_pmatrix:
+      {
+        type: file,
+        label: comp_pmatrix,
+        path: "results/figure_1/{virus}.p_matrix.tsv",
+      }
 
     $comparison_mds:
       type: rule
@@ -400,7 +544,8 @@ nodes:
       desc: MDS embedding for one comparison virus's marker.
       input: { pmatrix: $comp_pmatrix }
       output: { mds: $comp_mds }
-    $comp_mds: { type: file, label: comp_MDS, path: "results/figure_1/{virus}_MDS.csv" }
+    $comp_mds:
+      { type: file, label: comp_MDS, path: "results/figure_1/{virus}_MDS.csv" }
 
     $raxml_orf1_tree:
       type: rule
@@ -409,7 +554,12 @@ nodes:
       params: { model: PROTCATBLOSUM62 }
       input: { aln: $orf1_aln }
       output: { tree: $orf1_tree }
-    $orf1_tree: { type: file, label: ORF1_tree, path: "results/figure_1/Anellos.RAxML.newick" }
+    $orf1_tree:
+      {
+        type: file,
+        label: ORF1_tree,
+        path: "results/figure_1/Anellos.RAxML.newick",
+      }
 
     $figure_1:
       type: rule
@@ -417,10 +567,12 @@ nodes:
       desc: "Assemble Figure 1: MDS panels (anellovirus + comparison viruses) and the ORF1 tree."
       input: { anello_mds: $anello_mds, comp_mds: $comp_mds, tree: $orf1_tree }
       output: { pdf: $fig1_pdf }
-    $fig1_pdf: { type: file, label: figure_1.pdf, path: "results/figures/figure_1.pdf" }
+    $fig1_pdf:
+      { type: file, label: figure_1.pdf, path: "results/figures/figure_1.pdf" }
 
   # The anellovirus MDS is reused by Figure 2C -> top level.
-  $anello_mds: { type: file, label: anello_MDS, path: "results/figure_1/Anellos_MDS.csv" }
+  $anello_mds:
+    { type: file, label: anello_MDS, path: "results/figure_1/Anellos_MDS.csv" }
 
   # ###########################################################################
   # ANALYSIS — FIGURE 2A/B  (single rule, flat; banner carried as node data)
@@ -433,7 +585,12 @@ nodes:
     interpretation: Establishes the longitudinal design the Figures 3-4 claims rest on.
     input: { metadata: $metadata }
     output: { pdf: $fig2ab_pdf }
-  $fig2ab_pdf: { type: file, label: figure_2AB.pdf, path: "results/figures/figure_2AB.pdf" }
+  $fig2ab_pdf:
+    {
+      type: file,
+      label: figure_2AB.pdf,
+      path: "results/figures/figure_2AB.pdf",
+    }
 
   # ###########################################################################
   # ANALYSIS — FIGURE 2C  (single rule, flat)
@@ -446,7 +603,8 @@ nodes:
     interpretation: Each person carries a near-globally-representative slice of anellovirus diversity.
     input: { mds: $anello_mds, membership: $lineage_membership }
     output: { pdf: $fig2c_pdf }
-  $fig2c_pdf: { type: file, label: figure_2C.pdf, path: "results/figures/figure_2C.pdf" }
+  $fig2c_pdf:
+    { type: file, label: figure_2C.pdf, path: "results/figures/figure_2C.pdf" }
 
   # ###########################################################################
   # ANALYSIS — FIGURE 3  (single rule, flat)
@@ -459,7 +617,8 @@ nodes:
     interpretation: Recipients gain lineages after transfusion (median rises to 27; three >100).
     input: { rabund: $rabund_table }
     output: { pdf: $fig3_pdf }
-  $fig3_pdf: { type: file, label: figure_3.pdf, path: "results/figures/figure_3.pdf" }
+  $fig3_pdf:
+    { type: file, label: figure_3.pdf, path: "results/figures/figure_3.pdf" }
 
   # ###########################################################################
   # ANALYSIS — FIGURE 4 and TABLES S4/S5  (grouped: donor -> recipient transmission)
@@ -483,7 +642,12 @@ nodes:
       desc: Per-genus amino-acid p-distance matrix (transmission-strata similarity input).
       input: { fasta: $genus_fasta }
       output: { pmatrix: $genus_pmatrix }
-    $genus_pmatrix: { type: file, label: genus_pmatrix, path: "results/genus/{genus}s_aa.p_matrix.tsv" }
+    $genus_pmatrix:
+      {
+        type: file,
+        label: genus_pmatrix,
+        path: "results/genus/{genus}s_aa.p_matrix.tsv",
+      }
 
     $classify_transmission:
       type: rule
@@ -491,8 +655,18 @@ nodes:
       desc: Classify donor lineages transmitted (>=2 post-transfusion occurrences) vs not.
       input: { rabund: $rabund_table }
       output: { transmitted: $transmitted, not_transmitted: $not_transmitted }
-    $transmitted: { type: file, label: transmitted, path: "results/transmission/all_donor_transmitted_anellos_2occs.csv" }
-    $not_transmitted: { type: file, label: not_transmitted, path: "results/transmission/all_donor_not_transmitted_anellos.csv" }
+    $transmitted:
+      {
+        type: file,
+        label: transmitted,
+        path: "results/transmission/all_donor_transmitted_anellos_2occs.csv",
+      }
+    $not_transmitted:
+      {
+        type: file,
+        label: not_transmitted,
+        path: "results/transmission/all_donor_not_transmitted_anellos.csv",
+      }
 
     $table_S4:
       type: rule
@@ -500,7 +674,8 @@ nodes:
       desc: "Table S4: the transmitted-lineage determination table."
       input: { transmitted: $transmitted, metadata: $metadata }
       output: { csv: $tableS4_csv }
-    $tableS4_csv: { type: file, label: table_S4.csv, path: "results/tables/table_S4.csv" }
+    $tableS4_csv:
+      { type: file, label: table_S4.csv, path: "results/tables/table_S4.csv" }
 
     $table_S5:
       type: rule
@@ -508,18 +683,26 @@ nodes:
       desc: "Table S5: transmitted-lineage persistence over the timecourse."
       input: { transmitted: $transmitted, metadata: $metadata }
       output: { csv: $tableS5_csv }
-    $tableS5_csv: { type: file, label: table_S5.csv, path: "results/tables/table_S5.csv" }
+    $tableS5_csv:
+      { type: file, label: table_S5.csv, path: "results/tables/table_S5.csv" }
 
     $figure_4:
       type: rule
       tool: figure_4.py
       desc: "Figure 4: similarity distributions across transmitted / not-transmitted / resident strata."
-      input: { pmats: $genus_pmatrix, transmitted: $transmitted, not_transmitted: $not_transmitted }
+      input:
+        {
+          pmats: $genus_pmatrix,
+          transmitted: $transmitted,
+          not_transmitted: $not_transmitted,
+        }
       output: { pdf: $fig4_pdf }
-    $fig4_pdf: { type: file, label: figure_4.pdf, path: "results/figures/figure_4.pdf" }
+    $fig4_pdf:
+      { type: file, label: figure_4.pdf, path: "results/figures/figure_4.pdf" }
 
   # Per-genus ORF1 FASTA is reused by Figure S4 (GARD) -> top level.
-  $genus_fasta: { type: file, label: genus_fasta, path: "results/genus/{genus}s_aa.fasta" }
+  $genus_fasta:
+    { type: file, label: genus_fasta, path: "results/genus/{genus}s_aa.fasta" }
 
   # ###########################################################################
   # ANALYSIS — FIGURE S1  (grouped: sequencing read counts)
@@ -536,8 +719,18 @@ nodes:
       desc: Combine per-sample read tallies into the two count tables the figure plots.
       input: { counts: $read_counts }
       output: { raw: $raw_counts, anello: $anello_counts }
-    $raw_counts: { type: file, label: raw_counts, path: "results/figure_S1/raw_read_counts.tsv" }
-    $anello_counts: { type: file, label: anello_counts, path: "results/figure_S1/anello_read_counts.tsv" }
+    $raw_counts:
+      {
+        type: file,
+        label: raw_counts,
+        path: "results/figure_S1/raw_read_counts.tsv",
+      }
+    $anello_counts:
+      {
+        type: file,
+        label: anello_counts,
+        path: "results/figure_S1/anello_read_counts.tsv",
+      }
 
     $figure_S1:
       type: rule
@@ -545,7 +738,12 @@ nodes:
       desc: Render Figure S1 read-count bars.
       input: { raw: $raw_counts, anello: $anello_counts }
       output: { pdf: $figS1_pdf }
-    $figS1_pdf: { type: file, label: figure_S1.pdf, path: "results/figures/figure_S1.pdf" }
+    $figS1_pdf:
+      {
+        type: file,
+        label: figure_S1.pdf,
+        path: "results/figures/figure_S1.pdf",
+      }
 
   # ###########################################################################
   # ANALYSIS — FIGURE S3  (grouped: pairwise identity across genome features)
@@ -562,7 +760,12 @@ nodes:
       desc: SDT (MAFFT-based) pairwise-identity matrix for one genome feature.
       input: { feature: $feature_fasta }
       output: { matrix: $sdt_matrix }
-    $sdt_matrix: { type: file, label: sdt_matrix, path: "results/figure_S3/{feature}_mat.txt" }
+    $sdt_matrix:
+      {
+        type: file,
+        label: sdt_matrix,
+        path: "results/figure_S3/{feature}_mat.txt",
+      }
 
     $figure_S3:
       type: rule
@@ -570,7 +773,12 @@ nodes:
       desc: Render Figure S3 identity-distribution ridges from the four feature matrices.
       input: { matrices: $sdt_matrix }
       output: { pdf: $figS3_pdf }
-    $figS3_pdf: { type: file, label: figure_S3.pdf, path: "results/figures/figure_S3.pdf" }
+    $figS3_pdf:
+      {
+        type: file,
+        label: figure_S3.pdf,
+        path: "results/figures/figure_S3.pdf",
+      }
 
   # ###########################################################################
   # ANALYSIS — FIGURE 5  (grouped: recombination in the coding region)
@@ -587,7 +795,12 @@ nodes:
       desc: Full-length nucleotide alignment for one within-genus cluster.
       input: { cluster: $cluster_fasta }
       output: { aln: $cluster_aln }
-    $cluster_aln: { type: file, label: cluster_aln, path: "results/figure_5/anello_80.0_{cluster}.aln.fasta" }
+    $cluster_aln:
+      {
+        type: file,
+        label: cluster_aln,
+        path: "results/figure_5/anello_80.0_{cluster}.aln.fasta",
+      }
 
     $cluster_phyml_tree:
       type: rule
@@ -596,16 +809,27 @@ nodes:
       params: { opts: "-b 0 -m HKY85 -f m -t e -v 0 -c 4 -a e -o tlr" }
       input: { aln: $cluster_aln }
       output: { tree: $cluster_tree }
-    $cluster_tree: { type: file, label: cluster_tree, path: "results/figure_5/anello_80.0_{cluster}.newick" }
+    $cluster_tree:
+      {
+        type: file,
+        label: cluster_tree,
+        path: "results/figure_5/anello_80.0_{cluster}.newick",
+      }
 
     $cluster_window_trees:
       type: rule
       tool: window_trees.sh
       desc: Cut the alignment into adjacent 500-nt windows and build a PhyML tree per window.
-      params: { window: 500, opts: "-b 0 -m HKY85 -f m -t e -v 0 -c 4 -a e -o tlr" }
+      params:
+        { window: 500, opts: "-b 0 -m HKY85 -f m -t e -v 0 -c 4 -a e -o tlr" }
       input: { aln: $cluster_aln }
       output: { windows: $window_trees }
-    $window_trees: { type: file, label: window_trees, path: "results/figure_5/{cluster}_windows" }
+    $window_trees:
+      {
+        type: file,
+        label: window_trees,
+        path: "results/figure_5/{cluster}_windows",
+      }
 
     $cluster_rf_profile:
       type: rule
@@ -613,7 +837,12 @@ nodes:
       desc: "Robinson-Foulds distance between adjacent-window trees (ETE3): topology change along the genome."
       input: { windows: $window_trees }
       output: { rf: $rf_profile }
-    $rf_profile: { type: file, label: rf_profile, path: "results/figure_5/{cluster}_rf.tsv" }
+    $rf_profile:
+      {
+        type: file,
+        label: rf_profile,
+        path: "results/figure_5/{cluster}_rf.tsv",
+      }
 
     $cluster_clonalframeml:
       type: rule
@@ -622,16 +851,32 @@ nodes:
       params: { kappa: "2.0" }
       input: { aln: $cluster_aln, tree: $cluster_tree }
       output: { labelled: $cfml_labelled, annotated: $cfml_annotated }
-    $cfml_labelled: { type: file, label: CFML_labelled, path: "results/figure_5/anello_80.0_{cluster}_CFML.labelled_tree.newick" }
-    $cfml_annotated: { type: file, label: CFML_annotated, path: "results/figure_5/anello_80.0_{cluster}_CFML.annotated.tree" }
+    $cfml_labelled:
+      {
+        type: file,
+        label: CFML_labelled,
+        path: "results/figure_5/anello_80.0_{cluster}_CFML.labelled_tree.newick",
+      }
+    $cfml_annotated:
+      {
+        type: file,
+        label: CFML_annotated,
+        path: "results/figure_5/anello_80.0_{cluster}_CFML.annotated.tree",
+      }
 
     $figure_5:
       type: rule
       tool: figure_5.py
       desc: Assemble Figure 5 from the RF profiles and ClonalFrameML reconstructions of all three clusters.
-      input: { rf: $rf_profile, labelled: $cfml_labelled, annotated: $cfml_annotated }
+      input:
+        {
+          rf: $rf_profile,
+          labelled: $cfml_labelled,
+          annotated: $cfml_annotated,
+        }
       output: { pdf: $fig5_pdf }
-    $fig5_pdf: { type: file, label: figure_5.pdf, path: "results/figures/figure_5.pdf" }
+    $fig5_pdf:
+      { type: file, label: figure_5.pdf, path: "results/figures/figure_5.pdf" }
 
   # ###########################################################################
   # ANALYSIS — FIGURE S4  (grouped: recombination breakpoints, GARD)
@@ -648,7 +893,12 @@ nodes:
       desc: GARD on a genus alignment (Datamonkey/HyPhy engine).
       input: { alignment: $genus_fasta }
       output: { result: $gard_json }
-    $gard_json: { type: file, label: GARD_json, path: "results/figure_S4/{genus}_GARD_result.json" }
+    $gard_json:
+      {
+        type: file,
+        label: GARD_json,
+        path: "results/figure_S4/{genus}_GARD_result.json",
+      }
 
     $figure_S4:
       type: rule
@@ -656,7 +906,12 @@ nodes:
       desc: Summarise the three GARD JSONs into Figure S4.
       input: { gard: $gard_json }
       output: { pdf: $figS4_pdf }
-    $figS4_pdf: { type: file, label: figure_S4.pdf, path: "results/figures/figure_S4.pdf" }
+    $figS4_pdf:
+      {
+        type: file,
+        label: figure_S4.pdf,
+        path: "results/figures/figure_S4.pdf",
+      }
 
   # ###########################################################################
   # ANALYSIS — FIGURE S5  (grouped: recombination in non-coding sequence)
@@ -673,7 +928,8 @@ nodes:
       desc: Align one non-coding sequence set.
       input: { ncset: $noncoding_fasta }
       output: { aln: $nc_aln }
-    $nc_aln: { type: file, label: nc_aln, path: "results/figure_S5/{ncset}.aln.fasta" }
+    $nc_aln:
+      { type: file, label: nc_aln, path: "results/figure_S5/{ncset}.aln.fasta" }
 
     $noncoding_phyml_tree:
       type: rule
@@ -682,7 +938,8 @@ nodes:
       params: { opts: "-b 0 -m HKY85 -f m -t e -v 0 -c 4 -a e -o tlr" }
       input: { aln: $nc_aln }
       output: { tree: $nc_tree }
-    $nc_tree: { type: file, label: nc_tree, path: "results/figure_S5/{ncset}.newick" }
+    $nc_tree:
+      { type: file, label: nc_tree, path: "results/figure_S5/{ncset}.newick" }
 
     $noncoding_clonalframeml:
       type: rule
@@ -691,8 +948,18 @@ nodes:
       params: { kappa: "2.0" }
       input: { aln: $nc_aln, tree: $nc_tree }
       output: { labelled: $nc_labelled, mutations: $nc_mutations }
-    $nc_labelled: { type: file, label: nc_labelled, path: "results/figure_S5/{ncset}.labelled_tree.newick" }
-    $nc_mutations: { type: file, label: nc_mutations, path: "results/figure_S5/{ncset}.mutations.tsv" }
+    $nc_labelled:
+      {
+        type: file,
+        label: nc_labelled,
+        path: "results/figure_S5/{ncset}.labelled_tree.newick",
+      }
+    $nc_mutations:
+      {
+        type: file,
+        label: nc_mutations,
+        path: "results/figure_S5/{ncset}.mutations.tsv",
+      }
 
     $figure_S5:
       type: rule
@@ -700,7 +967,12 @@ nodes:
       desc: Assemble Figure S5 from the non-coding ClonalFrameML reconstructions.
       input: { trees: $nc_labelled }
       output: { pdf: $figS5_pdf }
-    $figS5_pdf: { type: file, label: figure_S5.pdf, path: "results/figures/figure_S5.pdf" }
+    $figS5_pdf:
+      {
+        type: file,
+        label: figure_S5.pdf,
+        path: "results/figures/figure_S5.pdf",
+      }
 
   # ###########################################################################
   # ANALYSIS — TABLE S1  (single rule, flat: dataset / contig statistics)
@@ -711,9 +983,16 @@ nodes:
     desc: Compile contig/ORF summary statistics into Table S1.
     question: What is the assembled dataset — how many contigs, lengths, circular genomes?
     interpretation: 1,656 contigs (median 2,916 bp), 190 circular genomes.
-    input: { contigs: $nr_contigs, circular: $circular_contigs, orf1: $orf1, genus: $contig_genus }
+    input:
+      {
+        contigs: $nr_contigs,
+        circular: $circular_contigs,
+        orf1: $orf1,
+        genus: $contig_genus,
+      }
     output: { csv: $tableS1_csv }
-  $tableS1_csv: { type: file, label: table_S1.csv, path: "results/tables/table_S1.csv" }
+  $tableS1_csv:
+    { type: file, label: table_S1.csv, path: "results/tables/table_S1.csv" }
 
   # ###########################################################################
   # ANALYSIS — NANOPORE VALIDATION (grouped)
@@ -731,7 +1010,12 @@ nodes:
       params: { filtlong: "--min_length 2000 --keep_percent 90" }
       input: { reads: $nanopore_reads }
       output: { reads: $nanopore_filt }
-    $nanopore_filt: { type: file, label: nanopore_filt, path: "results/nanopore/{sample}.filt.fastq.gz" }
+    $nanopore_filt:
+      {
+        type: file,
+        label: nanopore_filt,
+        path: "results/nanopore/{sample}.filt.fastq.gz",
+      }
 
     $nanopore_map:
       type: rule
@@ -740,7 +1024,8 @@ nodes:
       params: { preset: map-ont }
       input: { reads: $nanopore_filt, contigs: $contigs_dust }
       output: { bam: $nanopore_bam }
-    $nanopore_bam: { type: file, label: nanopore_bam, path: "results/nanopore/{sample}.bam" }
+    $nanopore_bam:
+      { type: file, label: nanopore_bam, path: "results/nanopore/{sample}.bam" }
 
     $nanopore_validation_report:
       type: rule
@@ -748,4 +1033,9 @@ nodes:
       desc: Summarise long-read support per contig into the validation report.
       input: { bams: $nanopore_bam }
       output: { report: $validation_report }
-    $validation_report: { type: file, label: validation_report, path: "results/nanopore/validation_report.tsv" }
+    $validation_report:
+      {
+        type: file,
+        label: validation_report,
+        path: "results/nanopore/validation_report.tsv",
+      }
