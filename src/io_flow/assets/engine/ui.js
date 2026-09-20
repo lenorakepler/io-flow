@@ -110,6 +110,18 @@ window.IOFlow = window.IOFlow || {};
     );
   }
 
+  // A non-interactive colour key: same stroke sample as edgeRow, but no
+  // `--edge` class / `data-edge-type`, so wireEdgeToggles never touches it.
+  // Use `legend: edgeKey:` to explain edge colours without making them toggles.
+  function keyRow(type, label) {
+    return (
+      `<div class="legend__row legend__row--key" role="listitem">` +
+      `<svg class="legend__edge" width="42" height="12" aria-hidden="true">` +
+      `<path class="edge edge--${IOF.esc(type)}" d="M1,6 H34" marker-end="url(#arrow)"></path>` +
+      `</svg><span class="legend__text">${IOF.esc(label || type)}</span></div>`
+    );
+  }
+
   // Clicking (or Enter/Space on) an edge/group row hides/shows that set.
   function wireEdgeToggles(state, legend) {
     const toggle = (row) => {
@@ -141,7 +153,10 @@ window.IOFlow = window.IOFlow || {};
     const declared = state.graph.legend;
     if (
       declared &&
-      ((declared.nodes || []).length || (declared.edges || []).length || (declared.groups || []).length)
+      ((declared.nodes || []).length ||
+        (declared.edges || []).length ||
+        (declared.edgeKey || []).length ||
+        (declared.groups || []).length)
     ) {
       legend.setAttribute("aria-label", declared.title || "Legend");
       const rows = [];
@@ -154,6 +169,7 @@ window.IOFlow = window.IOFlow || {};
       });
       const off = state.hiddenEdgeTypes || new Set();
       (declared.edges || []).forEach((e) => rows.push(edgeRow(e.type, e.label, off.has(e.type))));
+      (declared.edgeKey || []).forEach((e) => rows.push(keyRow(e.type, e.label)));
       const offG = state.hiddenEdgeGroups || new Set();
       (declared.groups || []).forEach((g) => rows.push(groupRow(g.group, g.label, offG.has(g.group))));
       legend.innerHTML = rows.join("");

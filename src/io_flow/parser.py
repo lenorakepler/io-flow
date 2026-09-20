@@ -341,17 +341,17 @@ def _legend(block: Any) -> dict[str, Any]:
     """
     if not isinstance(block, dict):
         raise ValueError("legend: must be a mapping of title/nodes/edges")
-    unknown = set(map(str, block)) - {"title", "nodes", "edges", "groups"}
+    unknown = set(map(str, block)) - {"title", "nodes", "edges", "edgeKey", "groups"}
     if unknown:
         raise ValueError(
             f"legend: unknown key(s) {', '.join(sorted(unknown))}; "
-            f"expected title, nodes, edges, groups"
+            f"expected title, nodes, edges, edgeKey, groups"
         )
     out: dict[str, Any] = {}
     title = block.get("title")
     if isinstance(title, str) and title.strip():
         out["title"] = title.strip()
-    for where in ("nodes", "edges"):
+    for where in ("nodes", "edges", "edgeKey"):
         if block.get(where) is not None:
             out[where] = _legend_entries(block[where], where)
     if block.get("groups") is not None:
