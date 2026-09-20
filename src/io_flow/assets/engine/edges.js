@@ -177,7 +177,10 @@ window.IOFlow = window.IOFlow || {};
       const a = n && n.data && n.data.anchors;
       return a ? SIDES[a[key]] : undefined;
     };
-    const eps = state.graph.edges.map((edge) => {
+    // `diagram: sidebarOnlyEdgeTypes: [...]` — relations that are recorded in
+    // the model (and listed in a node's sidebar) but never drawn or routed.
+    const sbOnly = new Set((state.graph.diagram || {}).sidebarOnlyEdgeTypes || []);
+    const eps = state.graph.edges.filter((e) => !sbOnly.has(e.type)).map((edge) => {
       const sVis = visibleIdOf(state, edge.source);
       const tVis = visibleIdOf(state, edge.target);
       const s = boxOf(state, sVis);

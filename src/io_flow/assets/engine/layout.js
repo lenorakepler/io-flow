@@ -244,6 +244,14 @@ window.IOFlow = window.IOFlow || {};
     const skipHidden = cfg.layoutSkipsHiddenEdges === true;
     const offT = new Set(skipHidden ? cfg.hiddenEdges || [] : []);
     const offG = new Set(skipHidden ? cfg.hiddenEdgeGroups || [] : []);
+    // Opt-in (`diagram: layoutExcludeEdgeTypes: [...]`): keep these edge types
+    // out of the layout entirely (they still render when visible). Use it to
+    // stop noisy I/O edges from spreading nodes while the backbone shapes it.
+    // Sidebar-only relations never route or lay out either.
+    const exT = new Set([
+      ...(cfg.layoutExcludeEdgeTypes || []),
+      ...(cfg.sidebarOnlyEdgeTypes || []),
+    ]);
     const parentOf = {};
     graph.nodes.forEach((n) => {
       parentOf[n.id] = n.parent == null ? null : n.parent;
@@ -258,7 +266,7 @@ window.IOFlow = window.IOFlow || {};
     };
     const out = [];
     graph.edges.forEach((e, i) => {
-      if (offT.has(e.type) || offG.has(e.group)) return;
+      if (offT.has(e.type) || offG.has(e.group) || exT.has(e.type)) return;
       const s = rep(e.source);
       const t = rep(e.target);
       // Drop self-loops created by stack-remapping (but keep genuine ones).

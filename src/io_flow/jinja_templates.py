@@ -386,6 +386,35 @@ def prerender(
         )
         return render_source(source, node, "blocks", classes, **slots)
 
+    # Relation blocks (reads/creates/uses/...) are wiring already emitted as
+    # edges; drop them from each node's `data` so the generic sidebar dump shows
+    # only real fields, not raw {group:..., $x:...} rows.
+    rel_keys = set(graph.get("relation_keys") or EDGE_KEYS)
+    for node in graph["nodes"]:
+        d = node.get("data")
+        if d and any(k in rel_keys for k in d):
+            node["data"] = {k: v for k, v in d.items() if k not in rel_keys}
+
+    # Sidebar-only relations (`diagram: sidebarOnlyEdgeTypes`) are never drawn;
+    # surface each as a readable field on its source node so the sidebar lists
+    # it (e.g. a stage's `uses:` tools) instead of a canvas edge.
+    sb_only = set((graph.get("diagram") or {}).get("sidebarOnlyEdgeTypes") or [])
+    if sb_only:
+        label_of = {n["id"]: (n.get("label") or n["id"]) for n in graph["nodes"]}
+        by_node: dict[str, dict[str, list[str]]] = {}
+        for e in graph.get("edges") or []:
+            if e.get("type") in sb_only:
+                by_node.setdefault(e["source"], {}).setdefault(e["type"], []).append(
+                    label_of.get(e["target"], e["target"])
+                )
+        for node in graph["nodes"]:
+            fields = by_node.get(node["id"])
+            if fields:
+                node["data"] = {
+                    **(node.get("data") or {}),
+                    **{typ: ", ".join(vals) for typ, vals in fields.items()},
+                }
+
     nodes = []
     for node in graph["nodes"]:
         # Body: `<type>.html` file, else the type's declaration. Sidebar:
