@@ -18,6 +18,11 @@
 body.has-filepanel #viewport {
   right: 380px;
 }
+/* The selection sidebar (#sidebar) also docks right and would otherwise hide
+   behind this always-open panel; dock it to the panel's left so both show. */
+body.has-filepanel #sidebar {
+  right: 380px;
+}
 #filepanel .fp__head {
   display: flex;
   align-items: baseline;
