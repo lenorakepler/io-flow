@@ -343,7 +343,111 @@ window.IOFlow = window.IOFlow || {};
     fit(node, gap);
   }
 
+  // Alternative backend (`diagram: engine: dagre`). Dagre is a pure-JS layered
+  // DAG layout whose contract is exactly io-flow's: it returns node positions
+  // and we draw our own edges. It's ~5x smaller than elkjs and often ranks a
+  // plain DAG more tightly. Prototype-level: compound header room is reserved by
+  // hand (dagre has no per-cluster header pad) and nested-compound growth isn't
+  // re-fit bottom-up, so deep nesting can slightly overflow. Flat and
+  // single-level-group diagrams (the common case) lay out cleanly.
+  function runDagre(graph, domIndex, stacks, collapsed) {
+    const stackRoots = stacks ? stacks.roots : null;
+    const cfg = graph.diagram || {};
+    const DIR = { DOWN: "TB", UP: "BT", RIGHT: "LR", LEFT: "RL" };
+    const rankdir = DIR[String(cfg.direction || "RIGHT").toUpperCase()] || "LR";
+    const HEADER = IOF.headerH() + 8;
+
+    const parentOf = {};
+    graph.nodes.forEach((n) => { parentOf[n.id] = n.parent == null ? null : n.parent; });
+    const hidden = (id) => {
+      for (let c = parentOf[id]; c != null; c = parentOf[c]) {
+        if (collapsed && collapsed.has(c)) return true;
+      }
+      return false;
+    };
+    // A node is a compound only if it has a *visible* child (a collapsed node's
+    // children are hidden, so it lays out as a header-only leaf).
+    const isCompound = {};
+    graph.nodes.forEach((n) => {
+      if (n.parent != null && !hidden(n.id)) isCompound[n.parent] = true;
+    });
+
+    const g = new dagre.graphlib.Graph({ compound: true, multigraph: true });
+    g.setGraph({
+      rankdir,
+      nodesep: Number(cfg.spacing) || 40,
+      ranksep: Number(cfg.layerSpacing) || 70,
+      marginx: 16,
+      marginy: 16,
+    });
+    g.setDefaultEdgeLabel(() => ({}));
+
+    graph.nodes.forEach((n) => {
+      if (hidden(n.id)) return;
+      if (isCompound[n.id]) {
+        g.setNode(n.id, {}); // dagre sizes it from its children
+      } else {
+        const el = domIndex[n.id];
+        const r = el.getBoundingClientRect();
+        const h = collapsed && collapsed.has(n.id) ? IOF.headerH() : Math.ceil(r.height);
+        g.setNode(n.id, { width: Math.ceil(r.width), height: h });
+      }
+    });
+    graph.nodes.forEach((n) => {
+      if (!hidden(n.id) && n.parent != null && g.hasNode(n.parent)) g.setParent(n.id, n.parent);
+    });
+    elkEdges(graph, stackRoots).forEach((e) => {
+      const s = e.sources[0];
+      const t = e.targets[0];
+      if (g.hasNode(s) && g.hasNode(t)) g.setEdge(s, t, {}, e.id);
+    });
+
+    dagre.layout(g);
+
+    // dagre gives absolute *center* coords; io-flow wants parent-relative
+    // top-left (edges.js sums the parent chain). Convert, and normalise roots.
+    const absTL = {};
+    g.nodes().forEach((id) => {
+      const nd = g.node(id);
+      if (nd) absTL[id] = { x: nd.x - nd.width / 2, y: nd.y - nd.height / 2, w: nd.width, h: nd.height };
+    });
+    let minX = Infinity;
+    let minY = Infinity;
+    graph.nodes.forEach((n) => {
+      if (parentOf[n.id] == null && absTL[n.id]) {
+        minX = Math.min(minX, absTL[n.id].x);
+        minY = Math.min(minY, absTL[n.id].y);
+      }
+    });
+    const shiftX = isFinite(minX) ? 16 - minX : 0;
+    const shiftY = isFinite(minY) ? 16 - minY : 0;
+
+    const pos = {};
+    graph.nodes.forEach((n) => {
+      const a = absTL[n.id];
+      if (!a) return;
+      const p = parentOf[n.id];
+      let x;
+      let y;
+      let h = a.h;
+      if (p == null || !absTL[p]) {
+        x = a.x + shiftX;
+        y = a.y + shiftY;
+      } else {
+        x = a.x - absTL[p].x;
+        y = a.y - absTL[p].y + HEADER; // clear the compound header overlay
+      }
+      if (isCompound[n.id]) h += HEADER; // grow the box to hold the shifted children
+      pos[n.id] = { x, y, w: a.w, h };
+    });
+    if (stacks) Object.assign(pos, stacks.pos);
+    return pos;
+  }
+
   async function run(graph, domIndex, hints, stacks, collapsed) {
+    if ((graph.diagram || {}).engine === "dagre") {
+      return runDagre(graph, domIndex, stacks, collapsed);
+    }
     const stackRoots = stacks ? stacks.roots : null;
     const roots = buildForest(graph);
     const rootOptions = rootOptionsFor(graph);

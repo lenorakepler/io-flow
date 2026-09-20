@@ -20,6 +20,7 @@ ASSETS = Path(__file__).resolve().parent / "assets"
 # then engine modules, with the bootstrap (`viewer.js`) last.
 SCRIPT_MANIFEST = [
     "vendor/elk.bundled.js",
+    "vendor/dagre.min.js",
     "vendor/panzoom.min.js",
     "templates.js",
     "engine/layout.js",
@@ -41,6 +42,13 @@ SCRIPT_MANIFEST = [
 # elkjs is ~1.6 MB. When every node position is pinned (layout mode
 # "restore") the browser never runs ELK, so it can be omitted entirely.
 ELK_ASSET = "vendor/elk.bundled.js"
+# dagre is an alternative backend (`diagram: engine: dagre`); ship only the one
+# the diagram actually uses.
+DAGRE_ASSET = "vendor/dagre.min.js"
+
+
+def _engine(graph: dict[str, Any]) -> str:
+    return (graph.get("diagram") or {}).get("engine") or "elk"
 
 
 def _read(rel: str) -> str:
@@ -167,9 +175,13 @@ def build_html(
     if type_css:
         styles = styles + "\n" + type_css
 
+    engine = _engine(graph)
     scripts = []
     for rel in SCRIPT_MANIFEST:
-        if rel == ELK_ASSET and elk_omitted(graph):
+        # Ship only the layout backend in use, and neither in pure-restore mode.
+        if rel == ELK_ASSET and (elk_omitted(graph) or engine == "dagre"):
+            continue
+        if rel == DAGRE_ASSET and (elk_omitted(graph) or engine != "dagre"):
             continue
         path = Path(templates) if (rel == "templates.js" and templates) else ASSETS / rel
         if not path.exists():
