@@ -35,7 +35,8 @@ def test_packaged_declarations_render_the_builtin_types():
     g["nodes"][0]["data"] = {"cli": "--config", "value": "config.yaml"}
     g["nodes"][1]["data"] = {"value": 60}
     nodes = _embedded(emit.build_html(g))
-    assert '<span class="node__badge">file</span>' in nodes["file"]["html"]
+    # file carries no badge (the accent colour reads as "file"); meta still shows.
+    assert "node__badge" not in nodes["file"]["html"]
     assert "<code>--config</code>" in nodes["file"]["html"]
     assert '<span class="node__badge">param</span>' in nodes["parameter"]["html"]
     assert "= 60" in nodes["parameter"]["html"]
