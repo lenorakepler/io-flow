@@ -321,6 +321,11 @@ body {
 /* An empty compound (class/group with no members yet) sizes to its header
  * text like a leaf: the header sits in normal flow instead of overlaying the
  * (nonexistent) children. The engine adds .node--empty (viewer.js). */
+/* Belt-and-suspenders: title is nowrap so the header shouldn't outgrow its
+   measured box, but let any future growth spill rather than clip the corners. */
+.node--empty {
+  overflow: visible;
+}
 .node--empty > .node__header {
   position: static;
   height: auto; /* release the fixed --header-h; size to text like a leaf */
