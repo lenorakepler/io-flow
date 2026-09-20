@@ -182,10 +182,13 @@ window.IOFlow = window.IOFlow || {};
     return { pos, roots };
   }
 
-  function toElk(entry, domIndex, hints, stackRoots) {
+  function toElk(entry, domIndex, hints, stackRoots, collapsed) {
     const { node, children } = entry;
     const out = { id: node.id };
-    if (children.length && !(stackRoots && stackRoots.has(node.id))) {
+    // A collapsed compound faces ELK as a header-only leaf, so its siblings
+    // reflow into the freed space instead of leaving a gap (collapse.js).
+    const isCollapsed = collapsed && collapsed.has(node.id);
+    if (children.length && !isCollapsed && !(stackRoots && stackRoots.has(node.id))) {
       out.layoutOptions = compoundOptions();
       // Lay out around a header-wide parent rather than widening it after the
       // fact, so siblings keep their spacing instead of being overlapped.
@@ -194,7 +197,12 @@ window.IOFlow = window.IOFlow || {};
         out.layoutOptions["elk.nodeSize.constraints"] = "MINIMUM_SIZE";
         out.layoutOptions["elk.nodeSize.minimum"] = `(${hw},0)`;
       }
-      out.children = children.map((c) => toElk(c, domIndex, hints, stackRoots));
+      out.children = children.map((c) => toElk(c, domIndex, hints, stackRoots, collapsed));
+    } else if (isCollapsed) {
+      // Header-only box: keep the measured width so the title still fits.
+      const el = domIndex[node.id];
+      out.width = Math.max(Math.ceil(el.getBoundingClientRect().width), headerWidth(el));
+      out.height = IOF.headerH();
     } else {
       // Leaves -- and stacked compounds, whose inline size planStacks set.
       const el = domIndex[node.id];
@@ -327,7 +335,7 @@ window.IOFlow = window.IOFlow || {};
     fit(node, gap);
   }
 
-  async function run(graph, domIndex, hints, stacks) {
+  async function run(graph, domIndex, hints, stacks, collapsed) {
     const stackRoots = stacks ? stacks.roots : null;
     const roots = buildForest(graph);
     const rootOptions = rootOptionsFor(graph);
@@ -337,7 +345,7 @@ window.IOFlow = window.IOFlow || {};
     const elkGraph = {
       id: "root",
       layoutOptions: rootOptions,
-      children: roots.map((r) => toElk(r, domIndex, hints, stackRoots)),
+      children: roots.map((r) => toElk(r, domIndex, hints, stackRoots, collapsed)),
       edges: elkEdges(graph, stackRoots),
     };
 

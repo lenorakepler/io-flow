@@ -1,10 +1,17 @@
 /* engine/collapse.js — collapse/expand compound nodes. INFRASTRUCTURE.
  *
- * Injects a toggle button into each compound header. Collapsing shrinks the
- * node to header height and hides its children (CSS `.node--collapsed`);
- * edges.js re-anchors any edge touching a hidden descendant to the collapsed
- * container automatically (its absPos resolves through `state.collapsed`).
- * View-only state — never persisted, never affects saved positions.
+ * Injects a toggle button into each compound header. Collapsing hides the
+ * node's children (CSS `.node--collapsed`) and re-runs ELK with that node
+ * sized to its header (layout.js `collapsed` arg), so its siblings reflow to
+ * fill the freed space instead of leaving a gap. The current positions seed
+ * the re-layout (ELK interactive mode) so the diagram shifts incrementally
+ * rather than jumping to a fresh arrangement. edges.js re-anchors any edge
+ * touching a hidden descendant to the collapsed container automatically.
+ *
+ * When the layout is pinned (`_layout.mode === "restore"`: saved/manual
+ * positions, no ELK), reflow would discard that hand-placement, so collapse
+ * falls back to shrinking the node in place. View-only state either way —
+ * never persisted, never affects saved positions.
  */
 window.IOFlow = window.IOFlow || {};
 (function (IOF) {
@@ -35,7 +42,7 @@ window.IOFlow = window.IOFlow || {};
     });
   }
 
-  function toggle(state, id, btn) {
+  async function toggle(state, id, btn) {
     const el = state.nodeEls[id];
     const on = !state.collapsed.has(id);
     if (on) state.collapsed.add(id);
@@ -44,8 +51,25 @@ window.IOFlow = window.IOFlow || {};
     btn.textContent = on ? "▸" : "▾";
     btn.setAttribute("aria-label", `${on ? "Expand" : "Collapse"} ${btn.dataset.nodeName}`);
     btn.setAttribute("aria-expanded", String(!on));
-    // Displayed height only; state.pos keeps the expanded size for restore.
-    el.style.height = (on ? IOF.headerH() : state.pos[id].h) + "px";
+
+    const pinned = state.layoutInfo && state.layoutInfo.mode === "restore";
+    if (pinned || !IOF.layout || typeof IOF.layout.run !== "function") {
+      // No ELK to reflow with (or reflowing would discard manual placement):
+      // shrink in place. state.pos keeps the expanded size for restore.
+      el.style.height = (on ? IOF.headerH() : state.pos[id].h) + "px";
+      IOF.edges.renderAll(state);
+      return;
+    }
+
+    // Reflow: re-run ELK with the collapsed set, seeded by the current
+    // positions so the rest of the diagram moves as little as possible.
+    const hints = {};
+    state.graph.nodes.forEach((n) => {
+      const p = state.pos[n.id];
+      if (p) hints[n.id] = [p.x, p.y];
+    });
+    const laid = await IOF.layout.run(state.graph, state.nodeEls, hints, state.stacks, state.collapsed);
+    IOF.applyPositions(state, laid);
     IOF.edges.renderAll(state);
   }
 

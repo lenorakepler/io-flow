@@ -100,9 +100,11 @@ window.IOFlow = window.IOFlow || {};
     // paths -- the inline sizes it sets are read back by measurement,
     // exactly like the sankey heights above. Null when the mode is off.
     const stacks = IOF.layout.planStacks ? IOF.layout.planStacks(graph, state.nodeEls) : null;
+    state.stacks = stacks; // collapse.js re-runs layout with these
 
     // 3. Layout (restore saved positions or run ELK), then apply.
     const info = graph._layout || { mode: "elk", positions: {}, notice: null };
+    state.layoutInfo = info; // collapse.js: reflow via ELK only when mode !== "restore"
     if (info.notice) showNotice(info.notice);
     let laid;
     if (info.mode === "restore") {
