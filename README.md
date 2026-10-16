@@ -870,10 +870,18 @@ style:
     - codemap          #   no suffix = bundled skin name
     - skin/overrides.css   #   .css/.js = local file, relative to THIS yaml
     - skin/sidebar.js
+    - |                #   contains `{` = a literal CSS string, inline
+      .critical { background-color: red; }
   css: theme.css       # path, resolved relative to THIS yaml file (replaces viewer.css)
   templates: templates/  # a dir of <type>.html Jinja templates (see above),
                          # or a .js file replacing templates.js
 ```
+
+A `skin:` entry containing `{` is taken as literal CSS rather than a name or
+file, so a few overrides can live in the YAML itself (use a `|` block scalar for
+multiple rules). It layers in order with the other entries. It isn't a file, so
+`edit` has nothing extra to watch -- it reloads with the YAML. `css:` is always
+a path: it replaces `viewer.css`, so it has no inline form.
 
 `css:`/`templates:` *replace* the packaged file; `skin:` is *additive* — each
 entry appended after the base (and after earlier entries), so it wins the

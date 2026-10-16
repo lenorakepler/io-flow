@@ -168,7 +168,11 @@ class LayoutServer:
         self._eff_css = self.css if self.css is not None else style.get("css")
         self._eff_templates = self.templates if self.templates is not None else style.get("templates")
         eff_skin = self.skin if self.skin is not None else style.get("skin")
-        self._eff_skin_files = [p for group in emit.skin_assets(eff_skin) for p in group]
+        # Inline CSS has no file to watch -- it lives in the YAML itself.
+        self._eff_skin_files = [
+            p for group in emit.skin_assets(eff_skin) for p in group
+            if not isinstance(p, emit.InlineCss)
+        ]
         self.html = emit.build_html(
             graph, css=self.css, templates=self.templates, skin=self.skin
         )
