@@ -75,6 +75,19 @@ def elk_omitted(graph: dict[str, Any]) -> bool:
 
 SKIN_SUFFIXES = (".css", ".js", ".html", ".j2")
 
+
+class InlineCss(str):
+    """A skin entry that is a literal stylesheet rather than a name or file."""
+
+
+def is_inline_css(entry: object) -> bool:
+    """True for a skin entry that is raw CSS: a string containing a rule block.
+
+    Skin names and file paths never contain ``{``, so it is the cheap tell --
+    the same one a type's ``css:`` uses to decide between a bare declaration
+    list and full rules."""
+    return isinstance(entry, str) and "{" in entry
+
 # A skin's default sidebar template: `<name>.sidebar.html` (or `.html.j2`)
 # beside `<name>.css`. Unlike `templates/<type>.sidebar.html` it is not keyed by
 # node type -- it is the skin's layout for every node with no type-specific one.
@@ -83,10 +96,12 @@ SIDEBAR_SUFFIXES = (".sidebar.html", ".sidebar.html.j2")
 
 def skin_assets(
     skin: str | Path | list[str | Path] | None,
-) -> tuple[list[Path], list[Path], list[Path]]:
+) -> tuple[list[Path | InlineCss], list[Path], list[Path]]:
     """Resolve skin entries to their (css, js, sidebar-template) files, in order.
 
-    An entry ending in ``.css``/``.js``/``.sidebar.html`` is a project-local
+    An entry containing ``{`` is raw CSS, kept as an :class:`InlineCss` in the
+    css list so it layers in order with the file-based entries. An entry ending
+    in ``.css``/``.js``/``.sidebar.html`` is a project-local
     file; anything else is a bundled skin name under ``assets/skins`` (every
     part optional). Skins are layered *on top of* the packaged assets (css
     appended after viewer.css; js injected right after templates.js), so a skin
@@ -96,10 +111,13 @@ def skin_assets(
         return [], [], []
     entries = [skin] if isinstance(skin, (str, Path)) else list(skin)
     base = ASSETS / "skins"
-    css_paths: list[Path] = []
+    css_paths: list[Path | InlineCss] = []
     js_paths: list[Path] = []
     sidebar_paths: list[Path] = []
     for entry in entries:
+        if is_inline_css(entry):
+            css_paths.append(InlineCss(entry))
+            continue
         path = Path(entry)
         if path.suffix in SKIN_SUFFIXES:
             if not path.exists():
@@ -170,7 +188,9 @@ def build_html(
     shell = _read("viewer.html")
     styles = Path(css).read_text(encoding="utf-8") if css else _read("viewer.css")
     for path in skin_css:
-        styles = styles + "\n" + path.read_text(encoding="utf-8")
+        styles = styles + "\n" + (
+            path if isinstance(path, InlineCss) else path.read_text(encoding="utf-8")
+        )
 
     # A type's own `css:` last, so a diagram's declaration beats the skin it uses.
     if type_css:

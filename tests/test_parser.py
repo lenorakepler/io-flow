@@ -1050,6 +1050,18 @@ def test_style_skin_files_resolve_relative_to_yaml_but_names_dont(tmp_path):
     ]
 
 
+def test_style_skin_inline_css_is_left_alone(tmp_path):
+    raw = ".critical {\n  background-color: red;\n}\n"
+    (tmp_path / "d.yaml").write_text(
+        "style:\n  skin: |\n    .critical {\n      background-color: red;\n    }\n"
+        "nodes: {$a: {}}\n",
+        encoding="utf-8",
+    )
+    g = parse_file(tmp_path / "d.yaml")
+    # Kept verbatim -- not resolved against the YAML's directory like a file.
+    assert g["style"]["skin"] == [raw]
+
+
 def test_descriptors_synthesize_a_first_child_from_a_field():
     """A registered `descriptors:` field becomes a synthetic child box."""
     graph = parse(

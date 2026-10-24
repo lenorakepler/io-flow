@@ -119,7 +119,7 @@ from typing import Any
 
 from ruamel.yaml import YAML
 
-from .emit import SKIN_SUFFIXES
+from .emit import SKIN_SUFFIXES, is_inline_css
 
 SIGIL = "$"
 # A region groups nodes *visually* without containing them: its `$`-members
@@ -367,7 +367,7 @@ def parse_file(path: str | Path) -> dict[str, Any]:
     # Resolve style: paths relative to the YAML's directory (not the CWD), so
     # `io-flow edit` run from anywhere finds them. `~` expands; absolute paths
     # pass through. A skin entry without a .css/.js suffix is a bundled name,
-    # not a path, and is left alone.
+    # not a path, and is left alone; so is one holding raw CSS (contains `{`).
     style = graph.get("style")
     if style:
         def _resolve(val: str) -> str:
@@ -379,7 +379,9 @@ def parse_file(path: str | Path) -> dict[str, Any]:
                 style[key] = _resolve(style[key])
         if style.get("skin"):
             style["skin"] = [
-                _resolve(s) if Path(s).suffix in SKIN_SUFFIXES else s
+                _resolve(s)
+                if not is_inline_css(s) and Path(s).suffix in SKIN_SUFFIXES
+                else s
                 for s in style["skin"]
             ]
     # `layoutFile:` (top level) sends saved positions to a sidecar YAML instead
@@ -1194,8 +1196,8 @@ def parse(data: dict[str, Any], base_dir: Path | None = None) -> dict[str, Any]:
             )
         style_out = {k: str(style[k]) for k in ("css", "templates") if style.get(k) is not None}
         # skin: one entry or a list, layered in order. A bare name is a bundled
-        # skin; an entry ending .css/.js is a project-local file (see
-        # emit.skin_assets).
+        # skin; an entry ending .css/.js is a project-local file; an entry
+        # containing `{` is raw CSS (see emit.skin_assets).
         skin = style.get("skin")
         if skin is not None:
             if isinstance(skin, str):

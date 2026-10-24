@@ -103,6 +103,26 @@ def test_bundled_skin_name_and_local_file_layer_together(tmp_path):
     assert html.index("io-flow bundled skin: code-map") < html.index("/* YAML-EXTRA */")
 
 
+def test_inline_css_skin_entry_layers_in_order(tmp_path):
+    over = tmp_path / "ov.css"
+    over.write_text("/* FILE-EXTRA */", encoding="utf-8")
+    raw = ".critical { background-color: red; } /* INLINE-EXTRA */"
+    html = emit.build_html(_graph(style={"skin": ["codemap", raw, str(over)]}))
+    assert "--header-h" in html  # base viewer.css kept, like any skin
+    assert ".critical { background-color: red; }" in html
+    assert (
+        html.index("io-flow bundled skin: code-map")
+        < html.index("/* INLINE-EXTRA */")
+        < html.index("/* FILE-EXTRA */")
+    )
+
+
+def test_inline_css_skin_is_not_a_watched_file():
+    css, js, sidebars = emit.skin_assets([".a { color: red }"])
+    assert css == [".a { color: red }"] and isinstance(css[0], emit.InlineCss)
+    assert js == [] and sidebars == []
+
+
 def test_unknown_skin_name_errors(tmp_path):
     with pytest.raises(FileNotFoundError, match="unknown skin 'nope'"):
         emit.build_html(_graph(), skin="nope")
