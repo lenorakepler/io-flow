@@ -95,7 +95,8 @@ class _Handler(BaseHTTPRequestHandler):
             positions = payload.get("positions", payload)
             new_edges = payload.get("new_edges") if isinstance(payload, dict) else None
             anchors = payload.get("anchors") if isinstance(payload, dict) else None
-            app.save(positions, new_edges, anchors)
+            routes = payload.get("routes") if isinstance(payload, dict) else None
+            app.save(positions, new_edges, anchors, routes)
             self._send(200, b'{"ok":true}', "application/json")
         except Exception as exc:  # pragma: no cover - defensive
             body = json.dumps({"ok": False, "error": str(exc)}).encode("utf-8")
@@ -179,7 +180,7 @@ class LayoutServer:
         self.out_path.write_text(self.html, encoding="utf-8")
 
     def save(
-        self, positions: dict, new_edges: list | None = None, anchors: dict | None = None
+        self, positions: dict, new_edges: list | None = None, anchors: dict | None = None, routes: dict | None = None
     ) -> None:
         # Append edges first, then re-parse so the merged topology hash covers
         # them -- otherwise the next load would see a "changed" topology.
@@ -187,7 +188,7 @@ class LayoutServer:
             edge_store.append_edges(self.input_path, parse_file(self.input_path), new_edges)
         graph = parse_file(self.input_path)
         layout_store.merge_positions(
-            graph.get("_layout_path") or self.input_path, graph, positions, anchors
+            graph.get("_layout_path") or self.input_path, graph, positions, anchors, routes
         )
         self.rebuild()
 

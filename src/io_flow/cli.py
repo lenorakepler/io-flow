@@ -7,6 +7,9 @@ Subcommands:
   apply-layout  merge a layout.json into the source YAML (no-server fallback)
   align         snap almost-aligned saved positions to exact columns/rows
   walk          walk a Python package into an io-flow YAML codebase map
+  graphml       export to GraphML in yEd's format, to try yEd's layouts
+  d2            export to D2 (https://d2lang.com)
+  layout        lay the chart out with one of D2's engines (tala, elk, dagre) and save positions and routes into the YAML
 """
 
 from __future__ import annotations
@@ -140,6 +143,45 @@ def cmd_walk(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_d2(args: argparse.Namespace) -> int:
+    from . import d2
+
+    graph = parse_file(Path(args.input))
+    text, _ = d2.to_d2(graph, body=not args.no_body, legend=args.legend)
+    out = Path(args.output) if args.output else Path(args.input).with_suffix(".d2")
+    out.write_text(text, encoding="utf-8")
+    print(f"wrote {out}")
+    return 0
+
+
+def cmd_layout(args: argparse.Namespace) -> int:
+    from . import d2, layout_store
+
+    path = Path(args.input)
+    graph = parse_file(path)
+    positions, routes = d2.run_layout(graph, engine=args.engine, body=not args.no_body, d2_bin=args.d2, keep_d2=Path(args.keep_d2) if args.keep_d2 else None)
+    layout_store.merge_positions(graph.get("_layout_path") or path, graph, positions, None, routes)
+    missing = [n["id"] for n in graph["nodes"] if n["id"] not in positions]
+    print(f"{args.engine}: {len(positions)} nodes placed, {len(routes)} edges routed; layout saved into {path}" + (f"; not placed: {', '.join(missing)}" if missing else ""))
+    if args.build:
+        graph = _build_graph(path)
+        out = Path(args.build)
+        out.write_text(emit.build_html(graph), encoding="utf-8")
+        print(f"wrote {out}")
+    return 0
+
+
+def cmd_graphml(args: argparse.Namespace) -> int:
+    from . import graphml
+
+    input_path = Path(args.input)
+    out = Path(args.output) if args.output else input_path.with_suffix(".graphml")
+    counts = graphml.write_graphml(parse_file(input_path), out)
+    print(f"wrote {out} ({counts['nodes']} nodes, {counts['groups']} groups, "
+          f"{counts['edges']} edges)")
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="io-flow", description=__doc__)
     sub = p.add_subparsers(dest="command", required=True)
@@ -211,6 +253,29 @@ def build_parser() -> argparse.ArgumentParser:
         help="emit nodes only; skip call/xcall edges (pure hierarchy, metadata intact)"
     )
     w.set_defaults(func=cmd_walk)
+
+    d = sub.add_parser("d2", help="export to D2 (https://d2lang.com)")
+    d.add_argument("input")
+    d.add_argument("-o", "--output")
+    d.add_argument("--no-body", action="store_true", help="titles only; body text goes to the tooltip")
+    d.add_argument("--legend", action="store_true", help="add a legend container with one sample per type")
+    d.set_defaults(func=cmd_d2)
+
+    lay = sub.add_parser("layout", help="lay out with a D2 engine and save positions and routes into the YAML")
+    lay.add_argument("input")
+    lay.add_argument("--engine", default="tala", choices=["tala", "elk", "dagre"], help="D2 layout engine (default tala)")
+    lay.add_argument("--no-body", action="store_true", help="lay out with titles only, as if the body text were not on the canvas")
+    lay.add_argument("--d2", default="d2", help="the d2 executable")
+    lay.add_argument("--keep-d2", help="also write the D2 text here")
+    lay.add_argument("--build", help="then build the HTML to this path")
+    lay.set_defaults(func=cmd_layout)
+
+    x = sub.add_parser(
+        "graphml", help="export to GraphML in yEd's format, to try yEd's layouts"
+    )
+    x.add_argument("input", help="input YAML file")
+    x.add_argument("-o", "--output", help="output GraphML path (default: <input>.graphml)")
+    x.set_defaults(func=cmd_graphml)
 
     return p
 

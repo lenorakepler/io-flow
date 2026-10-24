@@ -42,6 +42,11 @@ io-flow apply-layout example_input.yaml layout.json
 io-flow align example_input.yaml            # default tolerance: 8px
 io-flow align example_input.yaml --dry-run  # print what would move
 
+# Lay out with D2's engines (TALA, ELK, dagre; needs the d2 executable) and
+# save positions and edge routes into the YAML; the viewer restores them.
+io-flow layout example_input.yaml --engine tala
+io-flow d2 example_input.yaml -o example_input.d2   # D2 text only
+
 # Map a whole Python package into a diagram: one group per file, classes as
 # stacked members, edges from resolved calls (cross-file calls tagged `xcall`),
 # and each node carrying its source + args/returns/calls/modifies/attributes for
@@ -51,6 +56,9 @@ io-flow align example_input.yaml --dry-run  # print what would move
 # metadata sidebar with no extra flag.
 io-flow walk --package mypkg -o mypkg.yaml
 io-flow build mypkg.yaml -o mypkg.html
+
+# Export to GraphML in yEd's format, to try yEd's layouts on a chart (open the file in yEd or yEd Live, then Layout). Labels and a fill colour per type are written as yEd elements, nodes with children and `~regions` become group nodes (regions dashed), and the id, type and `body:` show as properties. Positions are not exported; nodes start on a grid. -o defaults to <input>.graphml.
+io-flow graphml example_input.yaml
 ```
 
 Opened over `http://localhost` (via `edit`) the **Save** button appears and

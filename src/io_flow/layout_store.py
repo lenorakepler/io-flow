@@ -95,10 +95,17 @@ def read_layout(path: str | Path) -> dict[str, Any] | None:
         return None
     positions: dict[str, list[float]] = {}
     anchors: dict[str, dict[str, str]] = {}
+    routes: dict[str, list] = {}
     hash_ = None
     for key, value in lay.items():
         if key == "_topology":
             hash_ = str(value)
+            continue
+        if key == "_routes":
+            # Engine edge routes (io-flow layout, or a save from the browser): {"src>tgt#k": [path d, label x, label y]}.
+            for ekey, spec in (value or {}).items() if isinstance(value, dict) else []:
+                if isinstance(spec, (list, tuple)) and spec and isinstance(spec[0], str):
+                    routes[str(ekey)] = [spec[0]] + [float(v) for v in list(spec)[1:3]]
             continue
         if key == "_anchors":
             # In-browser anchor overrides: {edge_key: {from?: side, to?: side}}.
@@ -115,7 +122,7 @@ def read_layout(path: str | Path) -> dict[str, Any] | None:
             continue
         # [x, y] for leaves, [x, y, w, h] for resized compounds.
         positions[str(key)] = nums
-    return {"hash": hash_, "positions": positions, "anchors": anchors}
+    return {"hash": hash_, "positions": positions, "anchors": anchors, "routes": routes}
 
 
 def annotate_graph(graph: dict[str, Any], path: str | Path) -> dict[str, Any]:
@@ -133,6 +140,8 @@ def annotate_graph(graph: dict[str, Any], path: str | Path) -> dict[str, Any]:
             "mode": "restore",
             "positions": saved["positions"],
             "anchors": anchors,
+            # Routes only make sense with the positions they were computed for.
+            "routes": saved.get("routes", {}),
             "notice": None,
         }
     elif saved:
@@ -163,8 +172,12 @@ def merge_positions(
     graph: dict[str, Any],
     positions: dict[str, Any],
     anchors: dict[str, Any] | None = None,
+    routes: dict[str, Any] | None = None,
 ) -> None:
     """Merge ``{id: [x, y]}`` into the YAML's ``layout:`` block, in place.
+
+    ``routes`` (optional) are engine edge routes, ``{"src>tgt#k": [svg path d, label x, label y]}``, stored under ``_routes``;
+    the viewer draws them instead of its own curves while the positions are restored. Written by ``io-flow layout`` and by the browser's Save.
 
     ``anchors`` (optional) are in-browser edge anchor overrides,
     ``{edge_key: {from?: side, to?: side}}``, stored under ``_anchors``;
@@ -202,6 +215,19 @@ def merge_positions(
                 cleaned[str(ekey)] = entry
         if cleaned:
             lay["_anchors"] = cleaned
+    if routes:
+        pairs = {}
+        for e in graph["edges"]:
+            pairs[(e["source"], e["target"])] = pairs.get((e["source"], e["target"]), 0) + 1
+        live = {f"{a}>{b}#{k}" for (a, b), n in pairs.items() for k in range(n)}
+        kept = CommentedMap()
+        for ekey, spec in routes.items():
+            if str(ekey) in live and isinstance(spec, (list, tuple)) and spec and isinstance(spec[0], str):
+                entry = CommentedSeq([str(spec[0])] + [_num(v) for v in list(spec)[1:3]])
+                entry.fa.set_flow_style()
+                kept[str(ekey)] = entry
+        if kept:
+            lay["_routes"] = kept
     for node in graph["nodes"]:
         p = positions.get(node["id"])
         # Silently ignore positions for ids not in the graph (stale client

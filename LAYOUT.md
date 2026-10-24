@@ -292,6 +292,16 @@ the first column.
 
 ---
 
+## Laying out with D2's engines, TALA included
+
+`io-flow layout CHART.yaml --engine tala` (or `elk`, `dagre`) exports the chart to D2, runs the `d2` executable, reads every box and edge path back from its SVG, and saves them as the chart's `layout:` block: `[x, y, w, h]` for every node, and under `_routes` each edge's SVG path with its label position. The viewer then restores the positions and sizes and draws the saved routes instead of its own curves, so the chart looks as D2 laid it out, with io-flow's click-to-dim, sidebar, drag and Save on top. Drag a node and its edges fall back to curves; Save keeps the routes that are still valid. D2 names each shape and edge in its SVG by the base64 of its id, which is what makes the read-back possible.
+
+TALA is D2's own engine, built for diagrams with containers and many edges; on the SurveillanceBench journey chart it produced a canvas a third the width of ELK's and nearly square, with the edges routed around the boxes and the labels placed. D2 v0.9 bundles it; `d2 layout` lists the engines found.
+
+`io-flow d2 CHART.yaml` writes the D2 text alone, to render with `d2 --layout tala CHART.d2 CHART.svg` or to paste into D2's playground. What carries over: nodes, labels, groups as containers, relation edges with labels, the type styles approximated, the body text under each title, the description as a tooltip. What does not: regions, sankey, stacked lists, saved positions, anchors.
+
+---
+
 ## Which edges affect the layout
 
 By default every edge — even one hidden by a group toggle — shapes the layout,

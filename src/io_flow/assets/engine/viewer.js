@@ -116,6 +116,10 @@ window.IOFlow = window.IOFlow || {};
     // Engine edge routes (`diagram: edgeRouting:`); none on a restored layout,
     // so those edges draw as face-to-face curves.
     state.routes = laid._routes || null;
+    // A restored layout may carry the engine's routes (io-flow layout, or a Save): drawn as written.
+    if (info.mode === "restore" && info.routes && Object.keys(info.routes).length && IOF.edges.routesFromSaved) {
+      state.routes = IOF.edges.routesFromSaved(graph, info.routes);
+    }
 
     // 4. Edges. Saved in-browser anchor overrides (layout: block `_anchors:`)
     // merge into edge.anchor first, layering over any YAML-declared anchors.

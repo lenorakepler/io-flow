@@ -82,6 +82,11 @@ window.IOFlow = window.IOFlow || {};
     if (state.anchorOverrides && Object.keys(state.anchorOverrides).length) {
       payload.anchors = state.anchorOverrides;
     }
+    // Engine routes still valid after the drags (a dragged edge has lost its route and is not sent).
+    if (IOF.edges.routesForSave) {
+      const routes = IOF.edges.routesForSave(state);
+      if (Object.keys(routes).length) payload.routes = routes;
+    }
     try {
       const r = await fetch("/save", {
         method: "POST",

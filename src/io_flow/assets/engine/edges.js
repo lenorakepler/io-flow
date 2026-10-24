@@ -189,6 +189,7 @@ window.IOFlow = window.IOFlow || {};
     state.graph.edges.forEach((edge, i) => {
       if (sbOnly.has(edge.type)) return;
       const route = routes && routes["edge_" + i];
+      const pts = Array.isArray(route) ? route : route && route.d ? pathPoints(route.d) : null;
       const sVis = visibleIdOf(state, edge.source);
       const tVis = visibleIdOf(state, edge.target);
       const s = boxOf(state, sVis);
@@ -215,7 +216,8 @@ window.IOFlow = window.IOFlow || {};
       const width = widthOf(edge);
       // A routed edge is drawn only while both ends still sit where the
       // engine left them; collapse re-anchors an end, so the route goes.
-      const routed = route && sVis === edge.source && tVis === edge.target ? route : null;
+      const routed = pts && pts.length >= 2 && sVis === edge.source && tVis === edge.target ? route : null;
+      const rpts = routed ? pts : null;
       eps.push({
         edge,
         sVis,
@@ -232,8 +234,8 @@ window.IOFlow = window.IOFlow || {};
         // interior detail of a closed box -- don't draw it, and don't let
         // it occupy anchor slots that real edges need.
         hidden: sVis === tVis,
-        sAnchor: routed ? routed[0] : { x: s.x + s.w / 2, y: s.y + s.h / 2 },
-        tAnchor: routed ? routed[routed.length - 1] : { x: t.x + t.w / 2, y: t.y + t.h / 2 },
+        sAnchor: rpts ? rpts[0] : { x: s.x + s.w / 2, y: s.y + s.h / 2 },
+        tAnchor: rpts ? rpts[rpts.length - 1] : { x: t.x + t.w / 2, y: t.y + t.h / 2 },
       });
     });
 
@@ -345,7 +347,38 @@ window.IOFlow = window.IOFlow || {};
     return { d, mid };
   }
 
+  // The coordinate pairs of an SVG path (absolute M, L, C, Q, S, T, H, V, A; what D2 and we write).
+  function pathPoints(d) {
+    const pts = [];
+    let cmd = null;
+    let nums = [];
+    let last = { x: 0, y: 0 };
+    const flush = () => {
+      if (!cmd) return;
+      const v = nums.map(Number);
+      if (cmd === "H") v.forEach((x) => pts.push((last = { x, y: last.y })));
+      else if (cmd === "V") v.forEach((y) => pts.push((last = { x: last.x, y })));
+      else if (cmd === "A") for (let j = 0; j + 6 < v.length; j += 7) pts.push((last = { x: v[j + 5], y: v[j + 6] }));
+      else for (let j = 0; j + 1 < v.length; j += 2) pts.push((last = { x: v[j], y: v[j + 1] }));
+    };
+    (String(d).match(/[A-Za-z]|[-+]?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?/g) || []).forEach((t) => {
+      if (/[A-Za-z]/.test(t)) {
+        flush();
+        cmd = t.toUpperCase();
+        nums = [];
+        if (cmd === "Z") cmd = null;
+      } else nums.push(t);
+    });
+    flush();
+    return pts;
+  }
+
   function routeOf(ep) {
+    if (ep.route && ep.route.d) {
+      // A saved path (io-flow layout with a D2 engine, or a browser Save): drawn as written, the label where it was placed.
+      const pts = pathPoints(ep.route.d);
+      return { d: ep.route.d, mid: ep.route.label || pts[Math.floor(pts.length / 2)] || ep.sAnchor };
+    }
     if (ep.route) {
       const r = pathFromRoute(ep.route, ep.routing);
       if (ep.route.label) r.mid = ep.route.label; // the engine placed the label
@@ -486,7 +519,8 @@ window.IOFlow = window.IOFlow || {};
     });
     // Routed edges may swing outside the node extent (a wrap-back row).
     (state.edgeGeom || []).forEach((ep) => {
-      (ep.route || []).forEach((p) => {
+      const pts = Array.isArray(ep.route) ? ep.route : ep.route && ep.route.d ? pathPoints(ep.route.d) : [];
+      pts.forEach((p) => {
         maxX = Math.max(maxX, p.x);
         maxY = Math.max(maxY, p.y);
       });
@@ -524,5 +558,48 @@ window.IOFlow = window.IOFlow || {};
     if (state.edgeGeom) applyGeometry(state, state.edgeGeom);
   }
 
-  IOF.edges = { renderAll, updateFor, resize, isAncestor, sankeyUnit, facePoints, setEdgeTypeHidden, setEdgeGroupHidden };
+  // Saved routes ({"src>tgt#k": [path d, label x, label y]}, the layout block's _routes) keyed by edge index, as {d, label}.
+  // k counts the edges between one pair in graph order, which is how io-flow layout and D2 number them.
+  function routesFromSaved(graph, saved) {
+    const out = {};
+    const seen = {};
+    graph.edges.forEach((e, i) => {
+      const pair = e.source + ">" + e.target;
+      const k = seen[pair] || 0;
+      seen[pair] = k + 1;
+      const r = saved[pair + "#" + k];
+      if (r && typeof r[0] === "string") {
+        out["edge_" + i] = { d: r[0], label: r.length >= 3 ? { x: +r[1], y: +r[2] } : null };
+      }
+    });
+    return out;
+  }
+
+  // The live routes in the saved form, for Save: engine point routes become M/L paths; a dragged edge has none.
+  function routesForSave(state) {
+    const out = {};
+    if (!state.routes) return out;
+    const seen = {};
+    state.graph.edges.forEach((e, i) => {
+      const pair = e.source + ">" + e.target;
+      const k = seen[pair] || 0;
+      seen[pair] = k + 1;
+      const r = state.routes["edge_" + i];
+      if (!r) return;
+      let d;
+      let label = null;
+      if (Array.isArray(r)) {
+        if (r.length < 2) return;
+        d = "M " + r.map((p) => `${Math.round(p.x)} ${Math.round(p.y)}`).join(" L ");
+        label = r.label || null;
+      } else if (r.d) {
+        d = r.d;
+        label = r.label || null;
+      } else return;
+      out[pair + "#" + k] = label ? [d, Math.round(label.x), Math.round(label.y)] : [d];
+    });
+    return out;
+  }
+
+  IOF.edges = { renderAll, updateFor, resize, isAncestor, sankeyUnit, facePoints, setEdgeTypeHidden, setEdgeGroupHidden, routesFromSaved, routesForSave, pathPoints };
 })(window.IOFlow);
