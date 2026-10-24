@@ -159,7 +159,7 @@ def cmd_layout(args: argparse.Namespace) -> int:
 
     path = Path(args.input)
     graph = parse_file(path)
-    positions, routes = d2.run_layout(graph, engine=args.engine, body=not args.no_body, d2_bin=args.d2, keep_d2=Path(args.keep_d2) if args.keep_d2 else None)
+    positions, routes = d2.run_layout(graph, engine=args.engine, body=not args.no_body, d2_bin=args.d2, keep_d2=Path(args.keep_d2) if args.keep_d2 else None, font_size=args.font_size)
     layout_store.merge_positions(graph.get("_layout_path") or path, graph, positions, None, routes)
     missing = [n["id"] for n in graph["nodes"] if n["id"] not in positions]
     print(f"{args.engine}: {len(positions)} nodes placed, {len(routes)} edges routed; layout saved into {path}" + (f"; not placed: {', '.join(missing)}" if missing else ""))
@@ -268,6 +268,7 @@ def build_parser() -> argparse.ArgumentParser:
     lay.add_argument("--d2", default="d2", help="the d2 executable")
     lay.add_argument("--keep-d2", help="also write the D2 text here")
     lay.add_argument("--build", help="then build the HTML to this path")
+    lay.add_argument("--font-size", type=int, default=14, help="the font size D2 measures the boxes at (default 14, io-flow's title size)")
     lay.set_defaults(func=cmd_layout)
 
     x = sub.add_parser(

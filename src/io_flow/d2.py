@@ -31,9 +31,14 @@ CSS_PROP = re.compile(r"([\w-]+)\s*:\s*([^;]+)")
 PAD = 16  # margin the normalised layout keeps at the top-left, like ELK's
 
 
+# D2's reserved keywords; a node whose id is one gets a trailing underscore as its D2 key (the read-back maps keys to ids, so nothing else changes).
+RESERVED = {"label", "desc", "shape", "icon", "constraint", "tooltip", "link", "near", "width", "height", "direction", "top", "left", "grid-rows", "grid-columns", "grid-gap", "vertical-gap", "horizontal-gap", "class", "classes", "vars", "style", "source-arrowhead", "target-arrowhead", "layers", "scenarios", "steps", "text", "code", "md", "latex"}
+
+
 def ident(s: str) -> str:
-    """A D2 key: letters, digits and underscores."""
-    return re.sub(r"[^A-Za-z0-9_]", "_", s)
+    """A D2 key: letters, digits and underscores; reserved words get a trailing underscore."""
+    k = re.sub(r"[^A-Za-z0-9_]", "_", s)
+    return k + "_" if k.lower() in RESERVED else k
 
 
 def _css_props(css: str) -> dict[str, str]:
@@ -99,7 +104,7 @@ def _style_body(st: dict[str, str]) -> str:
     return "; ".join(f"{k}: {_q(v) if str(v).startswith('#') else v}" for k, v in st.items())
 
 
-def to_d2(graph: dict, body: bool = True, legend: bool = False, direction: str | None = None) -> tuple[str, list[tuple[str, str]]]:
+def to_d2(graph: dict, body: bool = True, legend: bool = False, direction: str | None = None, font_size: int = 14) -> tuple[str, list[tuple[str, str]]]:
     """The D2 text for a parsed graph, and the (source, target) pair of every edge written, in order.
 
     D2 numbers the edges between one pair of shapes in declaration order, `(a -> b)[k]`, so the k-th pair in the returned list is the edge D2 calls `[k]`.
@@ -126,9 +131,13 @@ def to_d2(graph: dict, body: bool = True, legend: bool = False, direction: str |
 
     used = {n.get("type") for n in nodes if n.get("type")}
     out.append("classes: {")
+    # io-flow sets a 14px title and 12px body; D2's default is 16px. Boxes are measured at 14px so the
+    # io-flow text, which wraps at the box width, fits the box D2 sized (`font_size` to taste).
     for t in sorted(used):
-        st = _style_body(_style(_resolve(types, t)))
-        out.append(f"  {ident(t)}: {{ style: {{ {st} }} }}" if st else f"  {ident(t)}: {{}}")
+        st = _style(_resolve(types, t))
+        st.setdefault("font-size", str(font_size))
+        out.append(f"  {ident(t)}: {{ style: {{ {_style_body(st)} }} }}")
+    out.append(f'  io_flow_leaf: {{ style: {{ font-size: {font_size} }} }}')
     if legend:
         out.append('  legend_box: { style: { fill: "#ffffff"; stroke: "#94a3b8"; stroke-dash: 2; font-size: 13 } }')
     for rel, st in EDGE_CLASSES.items():
@@ -145,8 +154,7 @@ def to_d2(graph: dict, body: bool = True, legend: bool = False, direction: str |
         if body and data.get("body") and not kids:
             text = label + "\n" + _wrap(data["body"], 46)
         attrs = []
-        if n.get("type"):
-            attrs.append(f"class: {ident(n['type'])}")
+        attrs.append(f"class: {ident(n['type']) if n.get('type') else 'io_flow_leaf'}")
         tip = data.get("description") or (data.get("body") if kids else None)
         if tip:
             attrs.append(f"tooltip: {_q(tip)}")
@@ -283,7 +291,7 @@ def shift_path(d: str, dx: float, dy: float) -> str:
     return " ".join(out)
 
 
-def run_layout(graph: dict, engine: str = "tala", body: bool = True, d2_bin: str = "d2", keep_d2: Path | None = None) -> tuple[dict[str, list[float]], dict[str, list]]:
+def run_layout(graph: dict, engine: str = "tala", body: bool = True, d2_bin: str = "d2", keep_d2: Path | None = None, font_size: int = 14) -> tuple[dict[str, list[float]], dict[str, list]]:
     """Run D2 on the graph and return `(positions, routes)` ready for the layout store.
 
     positions: `{node id: [x, y, w, h]}`, parent-relative like the viewer's; routes: `{"src>tgt#k": [path d, label x, label y]}` in the same canvas coordinates as the root positions.
@@ -291,7 +299,7 @@ def run_layout(graph: dict, engine: str = "tala", body: bool = True, d2_bin: str
     exe = shutil.which(d2_bin)
     if not exe:
         raise SystemExit(f"{d2_bin} not found on PATH; install D2 from https://d2lang.com (TALA ships with it since v0.9)")
-    text, written = to_d2(graph, body=body, legend=False)
+    text, written = to_d2(graph, body=body, legend=False, font_size=font_size)
     with tempfile.TemporaryDirectory() as td:
         src = Path(td) / "chart.d2"
         svg_path = Path(td) / "chart.svg"

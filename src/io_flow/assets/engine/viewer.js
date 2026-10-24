@@ -153,6 +153,10 @@ window.IOFlow = window.IOFlow || {};
       state.pos[n.id] = { x: p.x, y: p.y, w: p.w, h: p.h };
       el.style.left = p.x + "px";
       el.style.top = p.y + "px";
+      // An explicit size wins over the type's max-width, or a box laid out by
+      // D2 (wider than io-flow measured it) would be clamped and its routed
+      // edges would start short of it.
+      el.style.maxWidth = "none";
       el.style.width = p.w + "px";
       el.style.height = p.h + "px";
     });
