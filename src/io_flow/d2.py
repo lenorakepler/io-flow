@@ -115,6 +115,9 @@ def to_d2(graph: dict, body: bool = True, legend: bool = False, direction: str |
     children: dict[str | None, list] = {}
     for n in nodes:
         children.setdefault(n.get("parent"), []).append(n)
+    # io-flow's stacked lists (diagram: classLayout) become one-column grids, so D2 keeps the rows in order under each other.
+    cl = (graph.get("diagram") or {}).get("classLayout")
+    stacked = set(cl.get("types", ["class"]) if isinstance(cl, dict) else ["class"]) if cl not in (None, False) else set()
 
     def full(nid: str) -> str:
         parts, cur = [], nid
@@ -163,6 +166,8 @@ def to_d2(graph: dict, body: bool = True, legend: bool = False, direction: str |
             out.append(head + " {")
             for a in attrs:
                 out.append(f"{ind}  {a}")
+            if n.get("type") in stacked:
+                out.append(f"{ind}  grid-columns: 1")
             for k in kids:
                 emit(k, depth + 1)
             out.append(f"{ind}}}")
